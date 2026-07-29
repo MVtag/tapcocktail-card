@@ -4,6 +4,8 @@ A custom Lovelace dashboard card for the [TapCocktail](https://github.com/MVtag/
 
 TapCocktail Card gives each cocktail tap a visual dashboard with cocktail selection, carbonation controls, recipe scaling, serving information, animated CO₂ bubbles and time-on-tap tracking.
 
+![TapCocktail Card showing Spezi on tap 2](images/tapcocktail-card.png)
+
 ## Features
 
 - Visual editor in the Home Assistant dashboard
