@@ -1,6 +1,6 @@
 /**
  * TapCocktail Lovelace Card
- * Version 1.0.0
+ * Version 1.0.1
  *
  * Example:
  * type: custom:tapcocktail-card
@@ -1396,6 +1396,12 @@ class TapCocktailCardEditor extends HTMLElement {
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  _displayIcon(icon, fallback = "🍹") {
+    const value = String(icon ?? "").trim();
+    if (!value) return fallback;
+    return value;
   }
 
   _libraryCocktails() {
