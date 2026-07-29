@@ -1,6 +1,6 @@
 /**
  * TapCocktail Lovelace Card
- * Version 0.8.3
+ * Version 1.0.0
  *
  * Example:
  * type: custom:tapcocktail-card
