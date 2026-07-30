@@ -1,6 +1,6 @@
 /**
  * TapCocktail Lovelace Card
- * Version 1.0.1
+ * Version 1.1.0
  *
  * Example:
  * type: custom:tapcocktail-card
@@ -37,6 +37,7 @@ class TapCocktailCard extends HTMLElement {
       show_progress: config.show_progress !== false,
       show_controls: config.show_controls !== false,
       show_time_on_tap: config.show_time_on_tap !== false,
+      show_shelf_life: config.show_shelf_life !== false,
       show_serving_tips: config.show_serving_tips !== false,
       show_recipe: config.show_recipe !== false,
       show_status: config.show_status !== false,
@@ -78,6 +79,7 @@ class TapCocktailCard extends HTMLElement {
       show_progress: true,
       show_controls: true,
       show_time_on_tap: true,
+      show_shelf_life: true,
       show_serving_tips: true,
       show_recipe: true,
       show_status: true,
@@ -119,7 +121,7 @@ class TapCocktailCard extends HTMLElement {
   _buildRenderKey() {
     if (!this._hass || !this._config) return "";
 
-    return Object.values(this._entityIds())
+    const entityKey = Object.values(this._entityIds())
       .map((entityId) => {
         const entity = this._state(entityId);
         return entity
@@ -127,6 +129,10 @@ class TapCocktailCard extends HTMLElement {
           : `${entityId}:missing`;
       })
       .join("|");
+
+    // Shelf-life and "time on tap" labels change as time passes, even when
+    // Home Assistant entity states themselves have not changed.
+    return `${entityKey}|minute:${Math.floor(Date.now() / 60000)}`;
   }
 
   _escape(value) {
@@ -214,6 +220,40 @@ class TapCocktailCard extends HTMLElement {
       default:
         return { label: "Ikke startet", icon: "mdi:pause-circle", css: "idle" };
     }
+  }
+
+  _shelfLifePresentation(shelfLife, readyEntity) {
+    const days = Number(shelfLife?.days);
+    if (!Number.isFinite(days) || days <= 0 || !readyEntity) return null;
+    if (["unknown", "unavailable", "none", ""].includes(readyEntity.state)) {
+      return null;
+    }
+
+    const started = new Date(readyEntity.state);
+    if (Number.isNaN(started.getTime())) return null;
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const elapsedDays = Math.max(0, (Date.now() - started.getTime()) / dayMs);
+    const remaining = Math.ceil(days - elapsedDays);
+    const usedRatio = elapsedDays / days;
+
+    if (remaining < 0) {
+      const overdue = Math.abs(remaining);
+      return {
+        css: "expired",
+        label: `Holdbarhed overskredet med ${overdue} ${overdue === 1 ? "dag" : "dage"}`,
+        detail: `Anbefalet holdbarhed: ${days} dage`,
+      };
+    }
+
+    return {
+      css: usedRatio >= 0.8 ? "warning" : "fresh",
+      label:
+        remaining === 0
+          ? "Sidste anbefalede dag"
+          : `${remaining} ${remaining === 1 ? "dag" : "dage"} tilbage`,
+      detail: `Holdbarhed: ${days} dage`,
+    };
   }
 
 
@@ -557,6 +597,7 @@ class TapCocktailCard extends HTMLElement {
     const co2 = attrs.co2 ?? attrs.vol_co2;
     const temperature = attrs.temperatur ?? attrs.temperature;
     const glass = attrs.glas ?? attrs.glass;
+    const shelfLife = attrs.holdbarhed ?? attrs.shelf_life;
     const servingTips =
       attrs.serveringstips ??
       attrs.servering_tip ??
@@ -602,6 +643,10 @@ class TapCocktailCard extends HTMLElement {
     const remaining = remainingEntity?.state ?? "Ikke startet";
     const finishedText = this._formatTimestamp(finishedEntity);
     const timeOnTapText = this._formatTimestamp(timeOnTapEntity);
+    const shelfLifeUi = this._shelfLifePresentation(
+      shelfLife,
+      timeOnTapEntity
+    );
 
     const cocktailOptions = cocktailSelect?.attributes?.options ?? [];
 
@@ -798,6 +843,32 @@ class TapCocktailCard extends HTMLElement {
           font-size:13px;
           text-align:center;
           color:var(--secondary-text-color);
+        }
+        .shelf-life {
+          margin-top:12px;
+          padding:10px 12px;
+          border-radius:12px;
+          text-align:center;
+          font-size:13px;
+          font-weight:800;
+        }
+        .shelf-life.fresh {
+          color:#155724;
+          background:#d4edda;
+        }
+        .shelf-life.warning {
+          color:#7a4b00;
+          background:#fff3cd;
+        }
+        .shelf-life.expired {
+          color:#842029;
+          background:#f8d7da;
+        }
+        .shelf-life-detail {
+          margin-top:3px;
+          font-size:11px;
+          font-weight:600;
+          opacity:.78;
         }
         .controls { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:10px; margin-top:20px; }
         select,button { min-height:42px; border:0; border-radius:13px; font:inherit; }
@@ -1171,6 +1242,12 @@ class TapCocktailCard extends HTMLElement {
                           : "Klar nu"}
                       </div>
                       <div class="ready-subtext">Tid på fad</div>
+                      ${this._config.show_shelf_life && shelfLifeUi
+                        ? `<div class="shelf-life ${shelfLifeUi.css}">
+                            <div>${this._escape(shelfLifeUi.label)}</div>
+                            <div class="shelf-life-detail">${this._escape(shelfLifeUi.detail)}</div>
+                          </div>`
+                        : ""}
                     </div>
                   `
                   : `
@@ -1370,6 +1447,7 @@ class TapCocktailCardEditor extends HTMLElement {
       show_progress: true,
       show_controls: true,
       show_time_on_tap: true,
+      show_shelf_life: true,
       show_serving_tips: true,
       show_recipe: true,
       show_status: true,
@@ -1607,6 +1685,7 @@ class TapCocktailCardEditor extends HTMLElement {
           ${this._toggle("show_progress", "Vis karboneringsstatus")}
           ${this._toggle("show_controls", "Vis start, stop og tidsvalg")}
           ${this._toggle("show_time_on_tap", "Vis tid på fad")}
+          ${this._toggle("show_shelf_life", "Vis holdbarhed på fad")}
           ${this._toggle("show_serving_tips", "Vis serveringstips")}
           ${this._toggle("show_recipe", "Vis opskrift")}
 
@@ -1709,7 +1788,7 @@ class TapCocktailCardEditor extends HTMLElement {
 
     this._value("layout_preset")?.addEventListener("change", (event) => {
       const presets = {
-        full: {compact:false,show_tap_name:true,show_status:true,show_cocktail_select:true,show_details:true,show_glass:true,show_bubbles:true,show_progress:true,show_controls:true,show_time_on_tap:true,show_serving_tips:true,show_recipe:true},
+        full: {compact:false,show_tap_name:true,show_status:true,show_cocktail_select:true,show_details:true,show_glass:true,show_bubbles:true,show_progress:true,show_controls:true,show_time_on_tap:true,show_shelf_life:true,show_serving_tips:true,show_recipe:true},
         serving: {compact:false,show_tap_name:true,show_status:true,show_cocktail_select:true,show_details:true,show_glass:true,show_bubbles:true,show_progress:false,show_controls:false,show_time_on_tap:false,show_serving_tips:true,show_recipe:true},
         carbonation: {compact:false,show_tap_name:true,show_status:true,show_cocktail_select:true,show_details:true,show_glass:true,show_bubbles:true,show_progress:true,show_controls:true,show_time_on_tap:true,show_serving_tips:false,show_recipe:false},
         compact: {compact:true,show_tap_name:false,show_status:false,show_cocktail_select:false,show_details:true,show_glass:true,show_bubbles:true,show_progress:false,show_controls:false,show_time_on_tap:false,show_serving_tips:false,show_recipe:false},
@@ -1756,6 +1835,7 @@ class TapCocktailCardEditor extends HTMLElement {
       "show_progress",
       "show_controls",
       "show_time_on_tap",
+      "show_shelf_life",
       "show_serving_tips",
       "show_recipe",
       "recipe_large_text",
