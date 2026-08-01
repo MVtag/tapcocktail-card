@@ -752,9 +752,18 @@ class TapCocktailCard extends HTMLElement {
         }
 
         @keyframes rise {
-          from { transform:translateY(0) scale(.8); opacity:0; }
+          from {
+            bottom:-32px;
+            transform:scale(.8);
+            opacity:0;
+          }
           15% { opacity:.7; }
-          to { transform:translateY(-390px) scale(1.15); opacity:0; }
+          85% { opacity:.7; }
+          to {
+            bottom:calc(100% + 32px);
+            transform:scale(1.15);
+            opacity:0;
+          }
         }
         .top { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:14px; }
         .cocktail-icon {
