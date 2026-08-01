@@ -1,6 +1,6 @@
 /**
  * TapCocktail Lovelace Card
- * Version 1.2.3
+ * Version 1.3.0
  *
  * Example:
  * type: custom:tapcocktail-card
@@ -1889,7 +1889,7 @@ class TapCocktailLibraryCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._config = {};
     this._hass = null;
-    this._library = { cocktails: {}, ingredients: {} };
+    this._library = { cocktails: {}, ingredients: {}, categories: { cocktail: [], ingredient: [] } };
     this._tab = "cocktails";
     this._search = "";
     this._category = "all";
@@ -1957,6 +1957,7 @@ class TapCocktailLibraryCard extends HTMLElement {
       this._library = {
         cocktails: result?.cocktails || {},
         ingredients: result?.ingredients || {},
+        categories: result?.categories || { cocktail: [], ingredient: [] },
       };
     } catch (error) {
       this._error = this._errorText(error);
@@ -1973,23 +1974,30 @@ class TapCocktailLibraryCard extends HTMLElement {
     return error?.message || error?.error || String(error || "Der opstod en ukendt fejl.");
   }
 
-  _categories() {
-    return [...new Set(this._items(this._library.cocktails)
-      .map((item) => item.kategori || "andre"))].sort((a, b) => a.localeCompare(b, "da"));
+  _categoryItems(kind) {
+    const categories = this._library.categories?.[kind];
+    return Array.isArray(categories) ? categories : [];
+  }
+
+  _categoryName(kind, id) {
+    const categoryId = String(id || (kind === "ingredient" ? "ukategoriseret" : "andre"));
+    return this._categoryItems(kind).find((item) => String(item.id) === categoryId)?.name
+      || categoryId.replaceAll("_", " ").replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   _filteredCocktails() {
     const needle = this._search.trim().toLocaleLowerCase("da");
     return this._items(this._library.cocktails)
       .filter((item) => this._category === "all" || (item.kategori || "andre") === this._category)
-      .filter((item) => !needle || `${item.navn || ""} ${item.kategori || ""}`.toLocaleLowerCase("da").includes(needle))
+      .filter((item) => !needle || `${item.navn || ""} ${this._categoryName("cocktail", item.kategori)}`.toLocaleLowerCase("da").includes(needle))
       .sort((a, b) => String(a.navn || "").localeCompare(String(b.navn || ""), "da"));
   }
 
   _filteredIngredients() {
     const needle = this._search.trim().toLocaleLowerCase("da");
     return this._items(this._library.ingredients)
-      .filter((item) => !needle || `${item.name || ""} ${item.id || ""}`.toLocaleLowerCase("da").includes(needle))
+      .filter((item) => this._category === "all" || (item.category || "ukategoriseret") === this._category)
+      .filter((item) => !needle || `${item.name || ""} ${item.id || ""} ${this._categoryName("ingredient", item.category)}`.toLocaleLowerCase("da").includes(needle))
       .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "da"));
   }
 
@@ -2011,7 +2019,7 @@ class TapCocktailLibraryCard extends HTMLElement {
           <div class="item-icon">${this._escape(item.ikon || "🍹")}</div>
           <div class="item-copy">
             <h3>${this._escape(item.navn || item.id)}</h3>
-            <span class="category">${this._escape(item.kategori || "Andre")}</span>
+            <span class="category">${this._escape(this._categoryName("cocktail", item.kategori))}</span>
             <span class="compact-facts">${this._escape(item.abv ?? 0)} % ABV · ${this._escape(item.co2 ?? "–")} vol CO₂</span>
           </div>
           <ha-icon class="expand-icon" icon="mdi:chevron-down"></ha-icon>
@@ -2038,7 +2046,7 @@ class TapCocktailLibraryCard extends HTMLElement {
   _renderIngredient(item) {
     return `<article class="library-item ingredient-item">
       <div class="ingredient-symbol">${Number(item.abv || 0) > 0 ? "🍾" : "🧃"}</div>
-      <div class="ingredient-copy"><h3>${this._escape(item.name || item.id)}</h3><span>${this._escape(item.id)}</span></div>
+      <div class="ingredient-copy"><h3>${this._escape(item.name || item.id)}</h3><span>${this._escape(this._categoryName("ingredient", item.category))}</span></div>
       <div class="abv-pill">${this._escape(item.abv ?? 0)} %</div>
       <div class="item-actions ingredient-actions">
         <button class="secondary-button" data-edit-ingredient="${this._escape(item.id)}">✏️</button>
@@ -2081,7 +2089,7 @@ class TapCocktailLibraryCard extends HTMLElement {
       <form id="cocktail-form" data-original-id="${this._escape(item?.id || "")}">
         <div class="form-grid">
           ${this._field("Navn", "navn", item?.navn || "", { required: true })}
-          ${this._field("Kategori", "kategori", item?.kategori || "cocktails", { required: true, placeholder: "cocktails" })}
+          ${this._select("Kategori", "kategori", item?.kategori || this._categoryItems("cocktail")[0]?.id || "andre", this._categoryItems("cocktail").map((category) => [category.id, category.name]))}
           ${this._field("Tema", "tema", item?.tema || "klassisk", { required: true })}
           ${this._field("Ikon (valgfrit)", "ikon_override", item?.ikon || "", { placeholder: "🍹" })}
           ${this._field("Farve", "brugerdefineret_farve", item?.farve || "#7ED957", { type: "color" })}
@@ -2116,9 +2124,34 @@ class TapCocktailLibraryCard extends HTMLElement {
       <form id="ingredient-form" data-original-id="${this._escape(item?.id || "")}">
         ${this._field("Navn", "name", item?.name || "", { required: true })}
         ${this._field("ID", "id", item?.id || "", { required: true, placeholder: "fx passionsfrugt_sirup" })}
+        ${this._select("Kategori", "category", item?.category || "ukategoriseret", this._categoryItems("ingredient").map((category) => [category.id, category.name]))}
         ${this._field("Alkoholprocent", "abv", item?.abv ?? 0, { type: "number", min: 0, max: 100, step: 0.1, required: true })}
         <div class="dialog-error">${this._escape(this._error)}</div>
         <footer><button type="button" class="secondary-button close-dialog">Annuller</button><button class="primary-button" type="submit" ${this._saving ? "disabled" : ""}>${this._saving ? "Gemmer…" : "💾 Gem ingrediens"}</button></footer>
+      </form>
+    </section></div>`;
+  }
+
+  _categoryDialog(kind, item = null) {
+    const categories = this._categoryItems(kind);
+    const label = kind === "cocktail" ? "cocktailkategorier" : "ingredienskategorier";
+    const rows = categories.map((category) => `
+      <div class="category-row">
+        <div><b>${this._escape(category.name)}</b><span>${this._escape(category.id)}</span></div>
+        <button type="button" class="secondary-button edit-category" data-category-id="${this._escape(category.id)}">✏️</button>
+        <button type="button" class="danger-button delete-category" data-category-id="${this._escape(category.id)}">🗑️</button>
+      </div>`).join("");
+    return `<div class="overlay"><section class="dialog" role="dialog" aria-modal="true">
+      <header><div><small>KATEGORIER</small><h2>Administrér ${label}</h2></div><button class="icon-button close-dialog">×</button></header>
+      <div class="category-list">${rows || '<p class="hint">Ingen kategorier oprettet endnu.</p>'}</div>
+      <form id="category-form" data-kind="${kind}" data-original-id="${this._escape(item?.id || "")}">
+        <h3>${item ? "Omdøb kategori" : "Opret ny kategori"}</h3>
+        ${this._field("Navn", "name", item?.name || "", { required: true, placeholder: "fx Spiritus" })}
+        <div class="dialog-error">${this._escape(this._error)}</div>
+        <footer>
+          ${item ? '<button type="button" class="secondary-button cancel-category-edit">Annuller redigering</button>' : ""}
+          <button class="primary-button" type="submit" ${this._saving ? "disabled" : ""}>${this._saving ? "Gemmer…" : item ? "💾 Gem navn" : "＋ Opret kategori"}</button>
+        </footer>
       </form>
     </section></div>`;
   }
@@ -2136,8 +2169,8 @@ class TapCocktailLibraryCard extends HTMLElement {
 
   _styles() {
     return `<style>
-      :host{display:block;font-family:var(--paper-font-body1_-_font-family,Arial,sans-serif);color:var(--primary-text-color)}*{box-sizing:border-box}ha-card{position:relative;overflow:hidden;padding:20px;border-radius:24px;background:var(--ha-card-background,var(--card-background-color,#fff))}.topbar,.tabs,.tools,.grid,.list-toggle,.state,.empty{position:relative;z-index:2}.card-bubbles{position:absolute;z-index:1;inset:0;pointer-events:none;overflow:hidden;opacity:.18}.card-bubbles i{position:absolute;bottom:-70px;width:54px;height:54px;border:3px solid color-mix(in srgb,var(--primary-color,#03a9f4) 55%,var(--divider-color,#ddd) 45%);border-radius:50%;animation:card-bubble-rise 13s linear infinite}.card-bubbles i:nth-child(1){left:5%;width:74px;height:74px;animation-delay:-3s}.card-bubbles i:nth-child(2){left:24%;width:42px;height:42px;animation-delay:-9s;animation-duration:11s}.card-bubbles i:nth-child(3){left:47%;width:92px;height:92px;animation-delay:-6s;animation-duration:16s}.card-bubbles i:nth-child(4){left:70%;width:58px;height:58px;animation-delay:-12s;animation-duration:14s}.card-bubbles i:nth-child(5){left:88%;width:36px;height:36px;animation-delay:-5s;animation-duration:10s}@keyframes card-bubble-rise{0%{transform:translateY(0) scale(.75);opacity:0}12%{opacity:.8}82%{opacity:.45}100%{transform:translateY(-900px) scale(1.18);opacity:0}}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px}.title-wrap small,.dialog small{font-size:10px;font-weight:900;letter-spacing:.16em;color:var(--secondary-text-color)}h1,h2,h3,p{margin:0}.topbar h1{font-size:24px;margin-top:3px}.icon-button{width:42px;height:42px;border:0;border-radius:50%;font-size:24px;background:color-mix(in srgb,var(--primary-text-color) 8%,transparent);color:inherit}.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:20px 0 14px;padding:5px;border-radius:16px;background:color-mix(in srgb,var(--primary-text-color) 7%,transparent)}.tab{border:0;border-radius:12px;padding:11px;background:transparent;color:var(--secondary-text-color);font-weight:800}.tab.active{color:var(--primary-text-color);background:var(--card-background-color,#fff);box-shadow:0 2px 10px #0002}.tools{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;margin-bottom:18px}.tools input,.tools select{min-height:44px;border:1px solid var(--divider-color,#ddd);border-radius:13px;padding:0 12px;background:var(--card-background-color,#fff);color:inherit;font:inherit}.primary-button,.secondary-button,.danger-button{border:0;border-radius:12px;min-height:40px;padding:0 14px;font:inherit;font-weight:800;cursor:pointer}.primary-button{background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)}.secondary-button{background:color-mix(in srgb,var(--primary-text-color) 9%,transparent);color:inherit}.danger-button{background:color-mix(in srgb,#f44336 14%,transparent);color:#d32f2f}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:10px}.library-item{position:relative;border:1px solid var(--divider-color,#ddd);border-radius:18px;padding:14px;background:color-mix(in srgb,var(--card-background-color,#fff) 97%,var(--primary-text-color) 3%);overflow:hidden}.item-accent{position:absolute;z-index:2;inset:0 auto 0 0;width:5px;background:var(--accent)}.item-toggle{position:relative;z-index:2;width:100%;padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.item-head{display:flex;align-items:center;gap:12px}.item-copy{min-width:0;flex:1}.item-icon{width:48px;height:48px;flex:0 0 48px;border-radius:50%;display:grid;place-items:center;font-size:26px;background:color-mix(in srgb,var(--accent) 25%,transparent)}.item-head h3,.ingredient-copy h3{font-size:17px}.category,.secondary,.ingredient-copy span{font-size:12px;color:var(--secondary-text-color)}.category{display:block}.compact-facts{display:block;margin-top:3px;font-size:11px;color:var(--secondary-text-color)}.expand-icon{transition:transform .2s ease;color:var(--secondary-text-color)}.cocktail-item.expanded .expand-icon{transform:rotate(180deg)}.cocktail-item.expanded .bubbles{opacity:.48}.cocktail-item.expanded .bubbles i{width:28px;height:28px;border-width:2px}.item-details{position:relative;z-index:2;animation:details-in .18s ease}.bubbles{position:absolute;z-index:1;inset:0;pointer-events:none;overflow:hidden;opacity:.34}.bubbles i{position:absolute;bottom:-18px;width:10px;height:10px;border:1.5px solid color-mix(in srgb,var(--accent) 75%,var(--primary-text-color) 25%);border-radius:50%;animation:bubble-rise 6s linear infinite}.bubbles i:nth-child(1){left:14%;width:7px;height:7px;animation-delay:-1s}.bubbles i:nth-child(2){left:38%;width:12px;height:12px;animation-delay:-4s;animation-duration:7s}.bubbles i:nth-child(3){left:62%;width:8px;height:8px;animation-delay:-2.5s;animation-duration:5.5s}.bubbles i:nth-child(4){left:78%;width:14px;height:14px;animation-delay:-5s;animation-duration:8s}.bubbles i:nth-child(5){left:91%;width:6px;height:6px;animation-delay:-3s;animation-duration:5s}@keyframes bubble-rise{0%{transform:translateY(0) scale(.7);opacity:0}15%{opacity:.75}85%{opacity:.45}100%{transform:translateY(-190px) scale(1.2);opacity:0}}@keyframes details-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}.facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:15px 0;font-size:12px}.facts span{padding:8px;border-radius:10px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}.facts b{display:block;font-size:14px}.item-actions{display:flex;gap:8px;margin-top:15px}.item-actions button{flex:1}.ingredient-item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}.ingredient-symbol{font-size:25px}.abv-pill{font-weight:900;padding:7px 10px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color) 9%,transparent);color:var(--primary-text-color)}.ingredient-actions{grid-column:1/-1;margin-top:3px}.list-toggle{display:block;width:100%;margin-top:12px}.state,.empty{text-align:center;padding:42px 12px;color:var(--secondary-text-color)}.error{color:#d32f2f}.overlay{position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:16px;background:#0009}.dialog{width:min(480px,100%);max-height:92vh;overflow:auto;padding:22px;border-radius:22px;background:var(--card-background-color,#fff);box-shadow:0 20px 80px #0008}.dialog.wide{width:min(940px,100%)}.dialog header{display:flex;justify-content:space-between;align-items:start;margin-bottom:20px}.dialog h2{margin-top:4px}.dialog form>label,.form-grid label,.ingredient-row label,.textareas label{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;font-size:12px;font-weight:800;color:var(--secondary-text-color)}.dialog input,.dialog select,.dialog textarea{width:100%;min-height:43px;border:1px solid var(--divider-color,#ddd);border-radius:11px;padding:9px 11px;background:var(--card-background-color,#fff);color:var(--primary-text-color);font:inherit}.dialog textarea{min-height:82px;resize:vertical}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px}.checkbox{flex-direction:row!important;align-items:center!important;margin-top:22px}.checkbox input{width:20px;height:20px;min-height:0}.section-title{display:flex;align-items:center;justify-content:space-between;margin:12px 0}.ingredient-row{position:relative;display:grid;grid-template-columns:1.2fr 1.2fr .65fr .7fr .8fr .8fr;gap:8px;padding:15px 8px 2px;border-top:1px solid var(--divider-color,#ddd)}.remove-row{position:absolute;right:-4px;top:-8px;width:26px;height:26px;border:0;border-radius:50%;background:#f44336;color:white;font-size:20px}.textareas{grid-template-columns:1fr 1fr;margin-top:18px}.dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.dialog-error{min-height:18px;margin-top:8px;color:#d32f2f;font-size:13px;font-weight:700}.confirm{text-align:center}.delete-icon{font-size:44px;margin-bottom:12px}.confirm p{margin-top:10px}.hint{font-size:12px;color:var(--secondary-text-color)}button:disabled{opacity:.55;cursor:wait}
-      @media(max-width:700px){ha-card{padding:14px;border-radius:18px}.topbar h1{font-size:20px}.tools{grid-template-columns:1fr auto}.tools select{grid-row:2}.tools .primary-button{grid-column:2;grid-row:1/3}.grid{grid-template-columns:1fr}.form-grid,.textareas{grid-template-columns:1fr 1fr}.ingredient-row{grid-template-columns:1fr 1fr}.dialog{padding:17px}.ingredient-row label:first-of-type,.ingredient-row label:nth-of-type(2){grid-column:span 1}}
+      :host{display:block;font-family:var(--paper-font-body1_-_font-family,Arial,sans-serif);color:var(--primary-text-color)}*{box-sizing:border-box}ha-card{position:relative;overflow:hidden;padding:20px;border-radius:24px;background:var(--ha-card-background,var(--card-background-color,#fff))}.topbar,.tabs,.tools,.grid,.list-toggle,.state,.empty{position:relative;z-index:2}.card-bubbles{position:absolute;z-index:1;inset:0;pointer-events:none;overflow:hidden;opacity:.18}.card-bubbles i{position:absolute;bottom:-50px;width:36px;height:36px;border:3px solid color-mix(in srgb,var(--primary-color,#03a9f4) 55%,var(--divider-color,#ddd) 45%);border-radius:50%;animation:card-bubble-rise 13s linear infinite}.card-bubbles i:nth-child(1){left:5%;width:48px;height:48px;animation-delay:-3s}.card-bubbles i:nth-child(2){left:24%;width:28px;height:28px;animation-delay:-9s;animation-duration:11s}.card-bubbles i:nth-child(3){left:47%;width:58px;height:58px;animation-delay:-6s;animation-duration:16s}.card-bubbles i:nth-child(4){left:70%;width:38px;height:38px;animation-delay:-12s;animation-duration:14s}.card-bubbles i:nth-child(5){left:88%;width:24px;height:24px;animation-delay:-5s;animation-duration:10s}@keyframes card-bubble-rise{0%{transform:translateY(0) scale(.75);opacity:0}12%{opacity:.8}82%{opacity:.45}100%{transform:translateY(-900px) scale(1.18);opacity:0}}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px}.title-wrap small,.dialog small{font-size:10px;font-weight:900;letter-spacing:.16em;color:var(--secondary-text-color)}h1,h2,h3,p{margin:0}.topbar h1{font-size:24px;margin-top:3px}.icon-button{width:42px;height:42px;border:0;border-radius:50%;font-size:24px;background:color-mix(in srgb,var(--primary-text-color) 8%,transparent);color:inherit}.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:20px 0 14px;padding:5px;border-radius:16px;background:color-mix(in srgb,var(--primary-text-color) 7%,transparent)}.tab{border:0;border-radius:12px;padding:11px;background:transparent;color:var(--secondary-text-color);font-weight:800}.tab.active{color:var(--primary-text-color);background:var(--card-background-color,#fff);box-shadow:0 2px 10px #0002}.tools{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:10px;margin-bottom:18px}.tools input,.tools select{min-height:44px;border:1px solid var(--divider-color,#ddd);border-radius:13px;padding:0 12px;background:var(--card-background-color,#fff);color:inherit;font:inherit}.primary-button,.secondary-button,.danger-button{border:0;border-radius:12px;min-height:40px;padding:0 14px;font:inherit;font-weight:800;cursor:pointer}.primary-button{background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)}.secondary-button{background:color-mix(in srgb,var(--primary-text-color) 9%,transparent);color:inherit}.danger-button{background:color-mix(in srgb,#f44336 14%,transparent);color:#d32f2f}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:10px}.library-item{position:relative;border:1px solid var(--divider-color,#ddd);border-radius:18px;padding:14px;background:color-mix(in srgb,var(--card-background-color,#fff) 97%,var(--primary-text-color) 3%);overflow:hidden}.item-accent{position:absolute;z-index:2;inset:0 auto 0 0;width:5px;background:var(--accent)}.item-toggle{position:relative;z-index:2;width:100%;padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.item-head{display:flex;align-items:center;gap:12px}.item-copy{min-width:0;flex:1}.item-icon{width:48px;height:48px;flex:0 0 48px;border-radius:50%;display:grid;place-items:center;font-size:26px;background:color-mix(in srgb,var(--accent) 25%,transparent)}.item-head h3,.ingredient-copy h3{font-size:17px}.category,.secondary,.ingredient-copy span{font-size:12px;color:var(--secondary-text-color)}.category{display:block}.compact-facts{display:block;margin-top:3px;font-size:11px;color:var(--secondary-text-color)}.expand-icon{transition:transform .2s ease;color:var(--secondary-text-color)}.cocktail-item.expanded .expand-icon{transform:rotate(180deg)}.cocktail-item.expanded .bubbles{opacity:.48}.cocktail-item.expanded .bubbles i{width:28px;height:28px;border-width:2px}.item-details{position:relative;z-index:2;animation:details-in .18s ease}.bubbles{position:absolute;z-index:1;inset:0;pointer-events:none;overflow:hidden;opacity:.34}.bubbles i{position:absolute;bottom:-18px;width:10px;height:10px;border:1.5px solid color-mix(in srgb,var(--accent) 75%,var(--primary-text-color) 25%);border-radius:50%;animation:bubble-rise 6s linear infinite}.bubbles i:nth-child(1){left:14%;width:7px;height:7px;animation-delay:-1s}.bubbles i:nth-child(2){left:38%;width:12px;height:12px;animation-delay:-4s;animation-duration:7s}.bubbles i:nth-child(3){left:62%;width:8px;height:8px;animation-delay:-2.5s;animation-duration:5.5s}.bubbles i:nth-child(4){left:78%;width:14px;height:14px;animation-delay:-5s;animation-duration:8s}.bubbles i:nth-child(5){left:91%;width:6px;height:6px;animation-delay:-3s;animation-duration:5s}@keyframes bubble-rise{0%{transform:translateY(0) scale(.7);opacity:0}15%{opacity:.75}85%{opacity:.45}100%{transform:translateY(-190px) scale(1.2);opacity:0}}@keyframes details-in{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}.facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:15px 0;font-size:12px}.facts span{padding:8px;border-radius:10px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}.facts b{display:block;font-size:14px}.item-actions{display:flex;gap:8px;margin-top:15px}.item-actions button{flex:1}.ingredient-item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}.ingredient-symbol{font-size:25px}.abv-pill{font-weight:900;padding:7px 10px;border-radius:99px;background:color-mix(in srgb,var(--primary-text-color) 9%,transparent);color:var(--primary-text-color)}.ingredient-actions{grid-column:1/-1;margin-top:3px}.category-list{display:grid;gap:8px;margin-bottom:22px}.category-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:8px;padding:10px;border:1px solid var(--divider-color,#ddd);border-radius:12px}.category-row span{display:block;margin-top:2px;font-size:11px;color:var(--secondary-text-color)}#category-form{padding-top:18px;border-top:1px solid var(--divider-color,#ddd)}#category-form h3{margin-bottom:14px}.list-toggle{display:block;width:100%;margin-top:12px}.state,.empty{text-align:center;padding:42px 12px;color:var(--secondary-text-color)}.error{color:#d32f2f}.overlay{position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:16px;background:#0009}.dialog{width:min(480px,100%);max-height:92vh;overflow:auto;padding:22px;border-radius:22px;background:var(--card-background-color,#fff);box-shadow:0 20px 80px #0008}.dialog.wide{width:min(940px,100%)}.dialog header{display:flex;justify-content:space-between;align-items:start;margin-bottom:20px}.dialog h2{margin-top:4px}.dialog form>label,.form-grid label,.ingredient-row label,.textareas label{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;font-size:12px;font-weight:800;color:var(--secondary-text-color)}.dialog input,.dialog select,.dialog textarea{width:100%;min-height:43px;border:1px solid var(--divider-color,#ddd);border-radius:11px;padding:9px 11px;background:var(--card-background-color,#fff);color:var(--primary-text-color);font:inherit}.dialog textarea{min-height:82px;resize:vertical}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px}.checkbox{flex-direction:row!important;align-items:center!important;margin-top:22px}.checkbox input{width:20px;height:20px;min-height:0}.section-title{display:flex;align-items:center;justify-content:space-between;margin:12px 0}.ingredient-row{position:relative;display:grid;grid-template-columns:1.2fr 1.2fr .65fr .7fr .8fr .8fr;gap:8px;padding:15px 8px 2px;border-top:1px solid var(--divider-color,#ddd)}.remove-row{position:absolute;right:-4px;top:-8px;width:26px;height:26px;border:0;border-radius:50%;background:#f44336;color:white;font-size:20px}.textareas{grid-template-columns:1fr 1fr;margin-top:18px}.dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.dialog-error{min-height:18px;margin-top:8px;color:#d32f2f;font-size:13px;font-weight:700}.confirm{text-align:center}.delete-icon{font-size:44px;margin-bottom:12px}.confirm p{margin-top:10px}.hint{font-size:12px;color:var(--secondary-text-color)}button:disabled{opacity:.55;cursor:wait}
+      @media(max-width:700px){ha-card{padding:14px;border-radius:18px}.topbar h1{font-size:20px}.tools{grid-template-columns:1fr auto}.tools select{grid-row:2}.tools .manage-categories{grid-column:1}.tools .primary-button{grid-column:2;grid-row:1/3}.grid{grid-template-columns:1fr}.form-grid,.textareas{grid-template-columns:1fr 1fr}.ingredient-row{grid-template-columns:1fr 1fr}.dialog{padding:17px}.ingredient-row label:first-of-type,.ingredient-row label:nth-of-type(2){grid-column:span 1}}
       @media(max-width:450px){.form-grid,.textareas,.ingredient-row{grid-template-columns:1fr}.tools{grid-template-columns:1fr}.tools .primary-button,.tools select{grid-column:auto;grid-row:auto}.primary-button{padding:0 10px}.topbar{align-items:start}}
     </style>`;
   }
@@ -2149,7 +2182,8 @@ class TapCocktailLibraryCard extends HTMLElement {
     const showAll = cocktailTab ? this._showAllCocktails : this._showAllIngredients;
     const hiddenItemCount = Math.max(0, allItems.length - 3);
     const items = showAll ? allItems : allItems.slice(0, 3);
-    const categoryOptions = this._categories().map((category) => `<option value="${this._escape(category)}" ${this._category === category ? "selected" : ""}>${this._escape(category)}</option>`).join("");
+    const categoryKind = cocktailTab ? "cocktail" : "ingredient";
+    const categoryOptions = this._categoryItems(categoryKind).map((category) => `<option value="${this._escape(category.id)}" ${this._category === category.id ? "selected" : ""}>${this._escape(category.name)}</option>`).join("");
     let content = "";
     if (this._loading) content = '<div class="state">Indlæser bibliotek…</div>';
     else if (this._error && !this._dialog) content = `<div class="state error">${this._escape(this._error)}<br><br><button class="secondary-button retry">Prøv igen</button></div>`;
@@ -2159,11 +2193,12 @@ class TapCocktailLibraryCard extends HTMLElement {
     if (this._dialog?.type === "cocktail") dialog = this._cocktailDialog(this._dialog.item);
     if (this._dialog?.type === "ingredient") dialog = this._ingredientDialog(this._dialog.item);
     if (this._dialog?.type === "delete") dialog = this._deleteDialog(this._dialog.kind, this._dialog.item);
+    if (this._dialog?.type === "categories") dialog = this._categoryDialog(this._dialog.kind, this._dialog.item);
     this.shadowRoot.innerHTML = `${this._styles()}<ha-card>
       <div class="card-bubbles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
       <div class="topbar"><div class="title-wrap"><h1>${this._escape(this._config.title)}</h1></div><button class="icon-button refresh" title="Genindlæs">↻</button></div>
       <div class="tabs"><button class="tab ${cocktailTab ? "active" : ""}" data-tab="cocktails">🍹 Cocktails <span>(${this._items(this._library.cocktails).length})</span></button><button class="tab ${!cocktailTab ? "active" : ""}" data-tab="ingredients">🧴 Ingredienser <span>(${this._items(this._library.ingredients).length})</span></button></div>
-      <div class="tools"><input class="search" type="search" value="${this._escape(this._search)}" placeholder="Søg i ${cocktailTab ? "cocktails" : "ingredienser"}…">${cocktailTab ? `<select class="category-filter"><option value="all">Alle kategorier</option>${categoryOptions}</select>` : ""}<button class="primary-button create">＋ Opret ${cocktailTab ? "cocktail" : "ingrediens"}</button></div>
+      <div class="tools"><input class="search" type="search" value="${this._escape(this._search)}" placeholder="Søg i ${cocktailTab ? "cocktails" : "ingredienser"}…"><select class="category-filter"><option value="all">Alle kategorier</option>${categoryOptions}</select><button class="secondary-button manage-categories">⚙️ Kategorier</button><button class="primary-button create">＋ Opret ${cocktailTab ? "cocktail" : "ingrediens"}</button></div>
       ${content}
     </ha-card>${dialog}`;
     this._bind();
@@ -2178,10 +2213,11 @@ class TapCocktailLibraryCard extends HTMLElement {
     const root = this.shadowRoot;
     root.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => { this._tab = button.dataset.tab; this._search = ""; this._category = "all"; this._showAllCocktails = false; this._showAllIngredients = false; this._render(); }));
     root.querySelector(".search")?.addEventListener("input", (event) => { this._search = event.target.value; this._showAllCocktails = false; this._showAllIngredients = false; this._render(); root.querySelector(".search")?.focus(); });
-    root.querySelector(".category-filter")?.addEventListener("change", (event) => { this._category = event.target.value; this._showAllCocktails = false; this._render(); });
+    root.querySelector(".category-filter")?.addEventListener("change", (event) => { this._category = event.target.value; this._showAllCocktails = false; this._showAllIngredients = false; this._render(); });
     root.querySelector(".refresh")?.addEventListener("click", () => { this._loaded = false; this._load(); });
     root.querySelector(".retry")?.addEventListener("click", () => { this._loaded = false; this._load(); });
     root.querySelector(".list-toggle")?.addEventListener("click", () => { if (this._tab === "cocktails") { this._showAllCocktails = !this._showAllCocktails; if (!this._showAllCocktails) this._expandedCocktailId = null; } else { this._showAllIngredients = !this._showAllIngredients; } this._render(); });
+    root.querySelector(".manage-categories")?.addEventListener("click", () => { this._error = ""; this._dialog = { type: "categories", kind: this._tab === "cocktails" ? "cocktail" : "ingredient", item: null }; this._render(); });
     root.querySelector(".create")?.addEventListener("click", () => { this._error = ""; this._dialog = { type: this._tab === "cocktails" ? "cocktail" : "ingredient", item: null }; this._render(); });
     root.querySelectorAll("[data-toggle-cocktail]").forEach((button) => button.addEventListener("click", () => { const id = button.dataset.toggleCocktail; this._expandedCocktailId = this._expandedCocktailId === id ? null : id; this._render(); }));
     root.querySelectorAll("[data-edit-cocktail]").forEach((button) => button.addEventListener("click", () => { this._error = ""; this._dialog = { type: "cocktail", item: this._find("cocktail", button.dataset.editCocktail) }; this._render(); }));
@@ -2193,6 +2229,14 @@ class TapCocktailLibraryCard extends HTMLElement {
     this._bindIngredientRows();
     root.querySelector("#cocktail-form")?.addEventListener("submit", (event) => this._saveCocktail(event));
     root.querySelector("#ingredient-form")?.addEventListener("submit", (event) => this._saveIngredient(event));
+    root.querySelector("#category-form")?.addEventListener("submit", (event) => this._saveCategory(event));
+    root.querySelectorAll(".edit-category").forEach((button) => button.addEventListener("click", () => {
+      const kind = this._dialog.kind;
+      const item = this._categoryItems(kind).find((category) => String(category.id) === button.dataset.categoryId);
+      this._dialog = { type: "categories", kind, item }; this._error = ""; this._render();
+    }));
+    root.querySelectorAll(".delete-category").forEach((button) => button.addEventListener("click", () => this._deleteCategory(this._dialog.kind, button.dataset.categoryId)));
+    root.querySelector(".cancel-category-edit")?.addEventListener("click", () => { this._dialog = { type: "categories", kind: this._dialog.kind, item: null }; this._error = ""; this._render(); });
     root.querySelector(".confirm-delete")?.addEventListener("click", (event) => this._delete(event.currentTarget.dataset.kind, event.currentTarget.dataset.id));
   }
 
@@ -2244,6 +2288,41 @@ class TapCocktailLibraryCard extends HTMLElement {
     try {
       await this._hass.callWS(this._command("tapcocktail/ingredient/save", { data: values, ...(form.dataset.originalId ? { original_id: form.dataset.originalId } : {}) }));
       this._dialog = null; this._loaded = false; await this._load();
+    } catch (error) { this._error = this._errorText(error); this._render(); }
+    finally { this._saving = false; }
+  }
+
+  async _saveCategory(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const kind = form.dataset.kind;
+    const values = Object.fromEntries(new FormData(form).entries());
+    this._saving = true; this._error = ""; this._render();
+    try {
+      await this._hass.callWS(this._command("tapcocktail/category/save", {
+        kind,
+        data: values,
+        ...(form.dataset.originalId ? { original_id: form.dataset.originalId } : {}),
+      }));
+      this._loaded = false;
+      await this._load();
+      this._dialog = { type: "categories", kind, item: null };
+      this._render();
+    } catch (error) { this._error = this._errorText(error); this._render(); }
+    finally { this._saving = false; }
+  }
+
+  async _deleteCategory(kind, categoryId) {
+    const category = this._categoryItems(kind).find((item) => String(item.id) === String(categoryId));
+    if (!window.confirm(`Slet kategorien "${category?.name || categoryId}"? Kategorien kan kun slettes, hvis den ikke bruges.`)) return;
+    this._saving = true; this._error = ""; this._render();
+    try {
+      await this._hass.callWS(this._command("tapcocktail/category/delete", { kind, category_id: categoryId, confirm: true }));
+      if (this._category === categoryId) this._category = "all";
+      this._loaded = false;
+      await this._load();
+      this._dialog = { type: "categories", kind, item: null };
+      this._render();
     } catch (error) { this._error = this._errorText(error); this._render(); }
     finally { this._saving = false; }
   }
