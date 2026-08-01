@@ -2,7 +2,7 @@
 
 A custom Lovelace dashboard card for the [TapCocktail](https://github.com/MVtag/TapCocktail) Home Assistant integration.
 
-TapCocktail Card provides a visual dashboard for every tap with drink selection, carbonation controls, recipe scaling, serving information, animated CO₂ bubbles, time on tap and keg shelf life.
+TapCocktail Card provides a visual dashboard for every tap with drink selection, carbonation controls, recipe scaling, serving information, animated CO₂ bubbles, time on tap and keg shelf life. The same installation also includes TapCocktail Library Card for managing cocktail and ingredient libraries.
 
 ![TapCocktail Card showing Spezi on tap 2](images/tapcocktail-card.png)
 
@@ -20,10 +20,14 @@ TapCocktail Card provides a visual dashboard for every tap with drink selection,
 - Full, serving, carbonation, compact and minimal layouts
 - Animated CO₂ bubbles
 - Danish duration formatting
+- Cocktail and ingredient library tabs
+- Search and category filtering
+- Create, edit and delete cocktails and ingredients
+- Mobile-friendly editor dialogs with deletion confirmation
 
 ## Requirements
 
-Install and configure the [TapCocktail integration](https://github.com/MVtag/TapCocktail) first. Shelf-life display requires TapCocktail **v1.8.0 or newer**.
+Install and configure the [TapCocktail integration](https://github.com/MVtag/TapCocktail) first. Shelf-life display requires TapCocktail **v1.8.0 or newer**. TapCocktail Library Card requires TapCocktail **v2.1.0 or newer** and a Home Assistant administrator account.
 
 ## Installation with HACS
 
@@ -57,6 +61,25 @@ name: Hane 1
 ```
 
 For another tap, change `tap` and the name. The editor controls layouts, visible information, recipe size, carbonation controls, time on tap and shelf-life display.
+
+## Library Card
+
+The Library Card is installed together with the regular card. Add it through the dashboard editor, or use YAML:
+
+```yaml
+type: custom:tapcocktail-library-card
+title: TapCocktail Bibliotek
+```
+
+It provides separate Cocktail and Ingredient tabs with search, filtering and safe create, edit and delete actions. Deletion always requires confirmation.
+
+If Home Assistant has more than one TapCocktail integration entry, add its entry ID:
+
+```yaml
+type: custom:tapcocktail-library-card
+title: TapCocktail Bibliotek
+entry_id: your_config_entry_id
+```
 
 ## Shelf-life display
 
