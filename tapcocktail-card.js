@@ -1,6 +1,6 @@
 /**
  * TapCocktail Lovelace Card
- * Version 1.1.0
+ * Version 1.2.0
  *
  * Example:
  * type: custom:tapcocktail-card
@@ -1873,5 +1873,377 @@ window.customCards.push({
   type: "tapcocktail-card",
   name: "TapCocktail Card",
   description: "Cocktailhane med layout-presets, opskrift, karbonering og live-forhåndsvisning.",
+  preview: true,
+});
+
+/**
+ * TapCocktail Library Card
+ * Requires TapCocktail integration 2.1.0 or newer.
+ *
+ * Example:
+ * type: custom:tapcocktail-library-card
+ */
+class TapCocktailLibraryCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = {};
+    this._hass = null;
+    this._library = { cocktails: {}, ingredients: {} };
+    this._tab = "cocktails";
+    this._search = "";
+    this._category = "all";
+    this._loading = true;
+    this._error = "";
+    this._dialog = null;
+    this._saving = false;
+    this._loaded = false;
+  }
+
+  static getStubConfig() {
+    return { title: "TapCocktail Bibliotek" };
+  }
+
+  setConfig(config) {
+    this._config = {
+      title: config?.title || "TapCocktail Bibliotek",
+      entry_id: config?.entry_id || null,
+    };
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._loaded) this._load();
+  }
+
+  getCardSize() {
+    return 8;
+  }
+
+  _escape(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  _items(value) {
+    if (Array.isArray(value)) return value;
+    return Object.values(value || {});
+  }
+
+  _command(type, extra = {}) {
+    return {
+      type,
+      ...extra,
+      ...(this._config.entry_id ? { entry_id: this._config.entry_id } : {}),
+    };
+  }
+
+  async _load() {
+    if (!this._hass) return;
+    this._loaded = true;
+    this._loading = true;
+    this._error = "";
+    this._render();
+    try {
+      const result = await this._hass.callWS(this._command("tapcocktail/library/get"));
+      this._library = {
+        cocktails: result?.cocktails || {},
+        ingredients: result?.ingredients || {},
+      };
+    } catch (error) {
+      this._error = this._errorText(error);
+    } finally {
+      this._loading = false;
+      this._render();
+    }
+  }
+
+  _errorText(error) {
+    const code = error?.code || "";
+    if (code === "unauthorized") return "Kun Home Assistant-administratorer kan bruge biblioteket.";
+    if (code === "not_configured") return "TapCocktail er ikke konfigureret, eller der er flere installationer. Angiv entry_id i kortet.";
+    return error?.message || error?.error || String(error || "Der opstod en ukendt fejl.");
+  }
+
+  _categories() {
+    return [...new Set(this._items(this._library.cocktails)
+      .map((item) => item.kategori || "andre"))].sort((a, b) => a.localeCompare(b, "da"));
+  }
+
+  _filteredCocktails() {
+    const needle = this._search.trim().toLocaleLowerCase("da");
+    return this._items(this._library.cocktails)
+      .filter((item) => this._category === "all" || (item.kategori || "andre") === this._category)
+      .filter((item) => !needle || `${item.navn || ""} ${item.kategori || ""}`.toLocaleLowerCase("da").includes(needle))
+      .sort((a, b) => String(a.navn || "").localeCompare(String(b.navn || ""), "da"));
+  }
+
+  _filteredIngredients() {
+    const needle = this._search.trim().toLocaleLowerCase("da");
+    return this._items(this._library.ingredients)
+      .filter((item) => !needle || `${item.name || ""} ${item.id || ""}`.toLocaleLowerCase("da").includes(needle))
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "da"));
+  }
+
+  _shelfLife(item) {
+    const days = item?.holdbarhed?.days;
+    return days ? `${days} dage` : "Ikke angivet";
+  }
+
+  _renderCocktail(item) {
+    const color = /^#[0-9a-f]{6}$/i.test(item.farve || "") ? item.farve : "#607d8b";
+    const ingredients = Array.isArray(item.ingredienser) ? item.ingredienser.length : 0;
+    return `<article class="library-item cocktail-item" style="--accent:${this._escape(color)}">
+      <div class="item-accent"></div>
+      <div class="item-head">
+        <div class="item-icon">${this._escape(item.ikon || "🍹")}</div>
+        <div><h3>${this._escape(item.navn || item.id)}</h3><span class="category">${this._escape(item.kategori || "Andre")}</span></div>
+      </div>
+      <div class="facts">
+        <span><b>${this._escape(item.abv ?? 0)} %</b> ABV</span>
+        <span><b>${this._escape(item.co2 ?? "–")}</b> vol CO₂</span>
+        <span><b>${this._escape(item.temperatur ?? "–")} °C</b></span>
+        <span><b>${ingredients}</b> ingredienser</span>
+      </div>
+      <div class="secondary">${this._escape(item.glas || "Glas ikke angivet")} · ${this._escape(this._shelfLife(item))}</div>
+      <div class="item-actions">
+        <button class="secondary-button" data-edit-cocktail="${this._escape(item.id)}">✏️ Rediger</button>
+        <button class="danger-button" data-delete-cocktail="${this._escape(item.id)}">🗑️ Slet</button>
+      </div>
+    </article>`;
+  }
+
+  _renderIngredient(item) {
+    return `<article class="library-item ingredient-item">
+      <div class="ingredient-symbol">${Number(item.abv || 0) > 0 ? "🍾" : "🧃"}</div>
+      <div class="ingredient-copy"><h3>${this._escape(item.name || item.id)}</h3><span>${this._escape(item.id)}</span></div>
+      <div class="abv-pill">${this._escape(item.abv ?? 0)} %</div>
+      <div class="item-actions ingredient-actions">
+        <button class="secondary-button" data-edit-ingredient="${this._escape(item.id)}">✏️</button>
+        <button class="danger-button" data-delete-ingredient="${this._escape(item.id)}">🗑️</button>
+      </div>
+    </article>`;
+  }
+
+  _field(label, name, value = "", options = {}) {
+    const { type = "text", step = "any", min = "", max = "", required = false, placeholder = "" } = options;
+    return `<label><span>${this._escape(label)}</span><input name="${name}" type="${type}" value="${this._escape(value)}" step="${step}" min="${min}" max="${max}" placeholder="${this._escape(placeholder)}" ${required ? "required" : ""}></label>`;
+  }
+
+  _select(label, name, value, options) {
+    return `<label><span>${this._escape(label)}</span><select name="${name}">${options.map(([key, text]) => `<option value="${this._escape(key)}" ${String(key) === String(value) ? "selected" : ""}>${this._escape(text)}</option>`).join("")}</select></label>`;
+  }
+
+  _ingredientRow(item = {}) {
+    const selected = item.bibliotek_id || "";
+    const libraryOptions = [["", "Manuel ingrediens"], ...this._items(this._library.ingredients).map((ingredient) => [ingredient.id, ingredient.name])];
+    return `<div class="ingredient-row">
+      <button type="button" class="remove-row" title="Fjern ingrediens">×</button>
+      ${this._select("Fra bibliotek", "ingredient_library", selected, libraryOptions)}
+      ${this._field("Navn", "ingredient_name", item.navn || "", { required: true })}
+      ${this._field("Alkohol %", "ingredient_abv", item.alkoholprocent ?? 0, { type: "number", min: 0, max: 100 })}
+      ${this._field("Pr. glas", "ingredient_glass", item.glas || "", { required: true, placeholder: "fx 4 cl" })}
+      ${this._field("2 liter", "ingredient_two", item["2_liter"] || "", { placeholder: "beregnes automatisk" })}
+      ${this._field("9 liter", "ingredient_nine", item["9_liter"] || "", { placeholder: "beregnes automatisk" })}
+    </div>`;
+  }
+
+  _cocktailDialog(item = null) {
+    const editing = Boolean(item);
+    const shelf = item?.holdbarhed || {};
+    let shelfMode = String(shelf.mode || "none");
+    if (!["none", "recommended", "3", "5", "7", "14", "30", "custom"].includes(shelfMode)) shelfMode = "custom";
+    const rows = (item?.ingredienser?.length ? item.ingredienser : [{}]).map((ingredient) => this._ingredientRow(ingredient)).join("");
+    return `<div class="overlay"><section class="dialog wide" role="dialog" aria-modal="true">
+      <header><div><small>${editing ? "REDIGER" : "OPRET"}</small><h2>${editing ? this._escape(item.navn) : "Ny cocktail"}</h2></div><button class="icon-button close-dialog">×</button></header>
+      <form id="cocktail-form" data-original-id="${this._escape(item?.id || "")}">
+        <div class="form-grid">
+          ${this._field("Navn", "navn", item?.navn || "", { required: true })}
+          ${this._field("Kategori", "kategori", item?.kategori || "cocktails", { required: true, placeholder: "cocktails" })}
+          ${this._field("Tema", "tema", item?.tema || "klassisk", { required: true })}
+          ${this._field("Ikon (valgfrit)", "ikon_override", item?.ikon || "", { placeholder: "🍹" })}
+          ${this._field("Farve", "brugerdefineret_farve", item?.farve || "#7ED957", { type: "color" })}
+          ${this._field("ABV %", "abv", item?.abv ?? 0, { type: "number", min: 0, max: 100 })}
+          ${this._field("CO₂ vol", "co2", item?.co2 ?? 2.5, { type: "number", min: 0, max: 6, step: 0.1 })}
+          ${this._field("Temperatur °C", "temperatur", item?.temperatur ?? 4, { type: "number", min: -10, max: 30, step: 0.5 })}
+          ${this._field("Glas", "glas", item?.glas || "", { placeholder: "Highball" })}
+          ${this._field("Karbonering timer", "karboneringstid_timer", item?.karbonering?.tid_timer ?? 24, { type: "number", min: 0, max: 168, step: 0.5 })}
+          ${this._select("Holdbarhed", "holdbarhed_valg", shelfMode, [["none","Ingen"],["recommended","Anbefalet"],["3","3 dage"],["5","5 dage"],["7","7 dage"],["14","14 dage"],["30","30 dage"],["custom","Brugerdefineret"]])}
+          ${this._field("Brugerdefinerede dage", "holdbarhed_dage", shelf.days || 7, { type: "number", min: 1, max: 3650 })}
+          ${this._select("Beregn fra", "beregn_fra", item?.beregning?.source || "glass", [["glass","Pr. glas"],["two_liter","2 liter"],["nine_liter","9 liter"]])}
+          <label class="checkbox"><input type="checkbox" name="automatisk_beregning" ${item?.beregning?.enabled !== false ? "checked" : ""}><span>Beregn mængder automatisk</span></label>
+          <label class="checkbox"><input type="checkbox" name="automatisk_abv" ${item?.abv_beregning?.enabled ? "checked" : ""}><span>Beregn ABV automatisk</span></label>
+        </div>
+        <div class="section-title"><h3>Ingredienser</h3><button type="button" class="secondary-button add-row">＋ Tilføj ingrediens</button></div>
+        <div id="ingredient-rows">${rows}</div>
+        <div class="form-grid textareas">
+          <label><span>Fremgangsmåde</span><textarea name="fremgangsmaade">${this._escape(item?.fremgangsmaade || "")}</textarea></label>
+          <label><span>Pynt</span><textarea name="pynt">${this._escape(item?.pynt || "")}</textarea></label>
+          <label><span>Serveringstips</span><textarea name="serveringstips">${this._escape(item?.serveringstips || "")}</textarea></label>
+          <label><span>Noter</span><textarea name="noter">${this._escape(item?.noter || "")}</textarea></label>
+        </div>
+        <div class="dialog-error">${this._escape(this._error)}</div>
+        <footer><button type="button" class="secondary-button close-dialog">Annuller</button><button class="primary-button" type="submit" ${this._saving ? "disabled" : ""}>${this._saving ? "Gemmer…" : "💾 Gem cocktail"}</button></footer>
+      </form>
+    </section></div>`;
+  }
+
+  _ingredientDialog(item = null) {
+    return `<div class="overlay"><section class="dialog" role="dialog" aria-modal="true">
+      <header><div><small>${item ? "REDIGER" : "OPRET"}</small><h2>${item ? this._escape(item.name) : "Ny ingrediens"}</h2></div><button class="icon-button close-dialog">×</button></header>
+      <form id="ingredient-form" data-original-id="${this._escape(item?.id || "")}">
+        ${this._field("Navn", "name", item?.name || "", { required: true })}
+        ${this._field("ID", "id", item?.id || "", { required: true, placeholder: "fx passionsfrugt_sirup" })}
+        ${this._field("Alkoholprocent", "abv", item?.abv ?? 0, { type: "number", min: 0, max: 100, step: 0.1, required: true })}
+        <div class="dialog-error">${this._escape(this._error)}</div>
+        <footer><button type="button" class="secondary-button close-dialog">Annuller</button><button class="primary-button" type="submit" ${this._saving ? "disabled" : ""}>${this._saving ? "Gemmer…" : "💾 Gem ingrediens"}</button></footer>
+      </form>
+    </section></div>`;
+  }
+
+  _deleteDialog(kind, item) {
+    const name = kind === "cocktail" ? item.navn : item.name;
+    return `<div class="overlay"><section class="dialog confirm" role="alertdialog" aria-modal="true">
+      <div class="delete-icon">🗑️</div><h2>Slet ${kind === "cocktail" ? "cocktail" : "ingrediens"}?</h2>
+      <p><b>${this._escape(name)}</b> bliver slettet permanent.</p>
+      ${kind === "ingredient" ? "<p class=hint>Eksisterende cocktails beholder deres gemte ingrediensdata.</p>" : ""}
+      <div class="dialog-error">${this._escape(this._error)}</div>
+      <footer><button class="secondary-button close-dialog">Annuller</button><button class="danger-button confirm-delete" data-kind="${kind}" data-id="${this._escape(item.id)}" ${this._saving ? "disabled" : ""}>${this._saving ? "Sletter…" : "Ja, slet"}</button></footer>
+    </section></div>`;
+  }
+
+  _styles() {
+    return `<style>
+      :host{display:block;font-family:var(--paper-font-body1_-_font-family,Arial,sans-serif);color:var(--primary-text-color)}*{box-sizing:border-box}ha-card{overflow:hidden;padding:20px;border-radius:24px;background:var(--ha-card-background,var(--card-background-color,#fff))}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px}.title-wrap small,.dialog small{font-size:10px;font-weight:900;letter-spacing:.16em;color:var(--primary-color,#03a9f4)}h1,h2,h3,p{margin:0}.topbar h1{font-size:24px;margin-top:3px}.icon-button{width:42px;height:42px;border:0;border-radius:50%;font-size:24px;background:color-mix(in srgb,var(--primary-text-color) 8%,transparent);color:inherit}.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:20px 0 14px;padding:5px;border-radius:16px;background:color-mix(in srgb,var(--primary-text-color) 7%,transparent)}.tab{border:0;border-radius:12px;padding:11px;background:transparent;color:var(--secondary-text-color);font-weight:800}.tab.active{color:var(--primary-color);background:var(--card-background-color,#fff);box-shadow:0 2px 10px #0002}.tools{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;margin-bottom:18px}.tools input,.tools select{min-height:44px;border:1px solid var(--divider-color,#ddd);border-radius:13px;padding:0 12px;background:var(--card-background-color,#fff);color:inherit;font:inherit}.primary-button,.secondary-button,.danger-button{border:0;border-radius:12px;min-height:40px;padding:0 14px;font:inherit;font-weight:800;cursor:pointer}.primary-button{background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff)}.secondary-button{background:color-mix(in srgb,var(--primary-text-color) 9%,transparent);color:inherit}.danger-button{background:color-mix(in srgb,#f44336 14%,transparent);color:#d32f2f}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:14px}.library-item{position:relative;border:1px solid var(--divider-color,#ddd);border-radius:18px;padding:16px;background:color-mix(in srgb,var(--card-background-color,#fff) 96%,var(--primary-color) 4%);overflow:hidden}.item-accent{position:absolute;inset:0 auto 0 0;width:5px;background:var(--accent)}.item-head{display:flex;align-items:center;gap:12px}.item-icon{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:26px;background:color-mix(in srgb,var(--accent) 25%,transparent)}.item-head h3,.ingredient-copy h3{font-size:17px}.category,.secondary,.ingredient-copy span{font-size:12px;color:var(--secondary-text-color)}.facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:15px 0;font-size:12px}.facts span{padding:8px;border-radius:10px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent)}.facts b{display:block;font-size:14px}.item-actions{display:flex;gap:8px;margin-top:15px}.item-actions button{flex:1}.ingredient-item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}.ingredient-symbol{font-size:25px}.abv-pill{font-weight:900;padding:7px 10px;border-radius:99px;background:color-mix(in srgb,var(--primary-color) 14%,transparent);color:var(--primary-color)}.ingredient-actions{grid-column:1/-1;margin-top:3px}.state,.empty{text-align:center;padding:42px 12px;color:var(--secondary-text-color)}.error{color:#d32f2f}.overlay{position:fixed;z-index:9999;inset:0;display:grid;place-items:center;padding:16px;background:#0009}.dialog{width:min(480px,100%);max-height:92vh;overflow:auto;padding:22px;border-radius:22px;background:var(--card-background-color,#fff);box-shadow:0 20px 80px #0008}.dialog.wide{width:min(940px,100%)}.dialog header{display:flex;justify-content:space-between;align-items:start;margin-bottom:20px}.dialog h2{margin-top:4px}.dialog form>label,.form-grid label,.ingredient-row label,.textareas label{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;font-size:12px;font-weight:800;color:var(--secondary-text-color)}.dialog input,.dialog select,.dialog textarea{width:100%;min-height:43px;border:1px solid var(--divider-color,#ddd);border-radius:11px;padding:9px 11px;background:var(--card-background-color,#fff);color:var(--primary-text-color);font:inherit}.dialog textarea{min-height:82px;resize:vertical}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px}.checkbox{flex-direction:row!important;align-items:center!important;margin-top:22px}.checkbox input{width:20px;height:20px;min-height:0}.section-title{display:flex;align-items:center;justify-content:space-between;margin:12px 0}.ingredient-row{position:relative;display:grid;grid-template-columns:1.2fr 1.2fr .65fr .7fr .8fr .8fr;gap:8px;padding:15px 8px 2px;border-top:1px solid var(--divider-color,#ddd)}.remove-row{position:absolute;right:-4px;top:-8px;width:26px;height:26px;border:0;border-radius:50%;background:#f44336;color:white;font-size:20px}.textareas{grid-template-columns:1fr 1fr;margin-top:18px}.dialog footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.dialog-error{min-height:18px;margin-top:8px;color:#d32f2f;font-size:13px;font-weight:700}.confirm{text-align:center}.delete-icon{font-size:44px;margin-bottom:12px}.confirm p{margin-top:10px}.hint{font-size:12px;color:var(--secondary-text-color)}button:disabled{opacity:.55;cursor:wait}
+      @media(max-width:700px){ha-card{padding:14px;border-radius:18px}.topbar h1{font-size:20px}.tools{grid-template-columns:1fr auto}.tools select{grid-row:2}.tools .primary-button{grid-column:2;grid-row:1/3}.grid{grid-template-columns:1fr}.form-grid,.textareas{grid-template-columns:1fr 1fr}.ingredient-row{grid-template-columns:1fr 1fr}.dialog{padding:17px}.ingredient-row label:first-of-type,.ingredient-row label:nth-of-type(2){grid-column:span 1}}
+      @media(max-width:450px){.form-grid,.textareas,.ingredient-row{grid-template-columns:1fr}.tools{grid-template-columns:1fr}.tools .primary-button,.tools select{grid-column:auto;grid-row:auto}.primary-button{padding:0 10px}.topbar{align-items:start}}
+    </style>`;
+  }
+
+  _render() {
+    if (!this.shadowRoot || !this._config) return;
+    const cocktailTab = this._tab === "cocktails";
+    const items = cocktailTab ? this._filteredCocktails() : this._filteredIngredients();
+    const categoryOptions = this._categories().map((category) => `<option value="${this._escape(category)}" ${this._category === category ? "selected" : ""}>${this._escape(category)}</option>`).join("");
+    let content = "";
+    if (this._loading) content = '<div class="state">Indlæser bibliotek…</div>';
+    else if (this._error && !this._dialog) content = `<div class="state error">${this._escape(this._error)}<br><br><button class="secondary-button retry">Prøv igen</button></div>`;
+    else if (!items.length) content = '<div class="empty">Ingen resultater fundet.</div>';
+    else content = `<div class="grid">${items.map((item) => cocktailTab ? this._renderCocktail(item) : this._renderIngredient(item)).join("")}</div>`;
+    let dialog = "";
+    if (this._dialog?.type === "cocktail") dialog = this._cocktailDialog(this._dialog.item);
+    if (this._dialog?.type === "ingredient") dialog = this._ingredientDialog(this._dialog.item);
+    if (this._dialog?.type === "delete") dialog = this._deleteDialog(this._dialog.kind, this._dialog.item);
+    this.shadowRoot.innerHTML = `${this._styles()}<ha-card>
+      <div class="topbar"><div class="title-wrap"><small>ADMINISTRATION</small><h1>${this._escape(this._config.title)}</h1></div><button class="icon-button refresh" title="Genindlæs">↻</button></div>
+      <div class="tabs"><button class="tab ${cocktailTab ? "active" : ""}" data-tab="cocktails">🍹 Cocktails <span>(${this._items(this._library.cocktails).length})</span></button><button class="tab ${!cocktailTab ? "active" : ""}" data-tab="ingredients">🧴 Ingredienser <span>(${this._items(this._library.ingredients).length})</span></button></div>
+      <div class="tools"><input class="search" type="search" value="${this._escape(this._search)}" placeholder="Søg i ${cocktailTab ? "cocktails" : "ingredienser"}…">${cocktailTab ? `<select class="category-filter"><option value="all">Alle kategorier</option>${categoryOptions}</select>` : ""}<button class="primary-button create">＋ Opret ${cocktailTab ? "cocktail" : "ingrediens"}</button></div>
+      ${content}
+    </ha-card>${dialog}`;
+    this._bind();
+  }
+
+  _find(kind, id) {
+    const source = kind === "cocktail" ? this._library.cocktails : this._library.ingredients;
+    return this._items(source).find((item) => String(item.id) === String(id));
+  }
+
+  _bind() {
+    const root = this.shadowRoot;
+    root.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => { this._tab = button.dataset.tab; this._search = ""; this._category = "all"; this._render(); }));
+    root.querySelector(".search")?.addEventListener("input", (event) => { this._search = event.target.value; this._render(); root.querySelector(".search")?.focus(); });
+    root.querySelector(".category-filter")?.addEventListener("change", (event) => { this._category = event.target.value; this._render(); });
+    root.querySelector(".refresh")?.addEventListener("click", () => { this._loaded = false; this._load(); });
+    root.querySelector(".retry")?.addEventListener("click", () => { this._loaded = false; this._load(); });
+    root.querySelector(".create")?.addEventListener("click", () => { this._error = ""; this._dialog = { type: this._tab === "cocktails" ? "cocktail" : "ingredient", item: null }; this._render(); });
+    root.querySelectorAll("[data-edit-cocktail]").forEach((button) => button.addEventListener("click", () => { this._error = ""; this._dialog = { type: "cocktail", item: this._find("cocktail", button.dataset.editCocktail) }; this._render(); }));
+    root.querySelectorAll("[data-edit-ingredient]").forEach((button) => button.addEventListener("click", () => { this._error = ""; this._dialog = { type: "ingredient", item: this._find("ingredient", button.dataset.editIngredient) }; this._render(); }));
+    root.querySelectorAll("[data-delete-cocktail]").forEach((button) => button.addEventListener("click", () => { this._error = ""; this._dialog = { type: "delete", kind: "cocktail", item: this._find("cocktail", button.dataset.deleteCocktail) }; this._render(); }));
+    root.querySelectorAll("[data-delete-ingredient]").forEach((button) => button.addEventListener("click", () => { this._error = ""; this._dialog = { type: "delete", kind: "ingredient", item: this._find("ingredient", button.dataset.deleteIngredient) }; this._render(); }));
+    root.querySelectorAll(".close-dialog").forEach((button) => button.addEventListener("click", () => { this._dialog = null; this._error = ""; this._render(); }));
+    root.querySelector(".add-row")?.addEventListener("click", () => { root.querySelector("#ingredient-rows").insertAdjacentHTML("beforeend", this._ingredientRow()); this._bindIngredientRows(); });
+    this._bindIngredientRows();
+    root.querySelector("#cocktail-form")?.addEventListener("submit", (event) => this._saveCocktail(event));
+    root.querySelector("#ingredient-form")?.addEventListener("submit", (event) => this._saveIngredient(event));
+    root.querySelector(".confirm-delete")?.addEventListener("click", (event) => this._delete(event.currentTarget.dataset.kind, event.currentTarget.dataset.id));
+  }
+
+  _bindIngredientRows() {
+    const root = this.shadowRoot;
+    root.querySelectorAll(".ingredient-row").forEach((row) => {
+      row.querySelector(".remove-row")?.addEventListener("click", () => { if (root.querySelectorAll(".ingredient-row").length > 1) row.remove(); });
+      row.querySelector('[name="ingredient_library"]')?.addEventListener("change", (event) => {
+        const ingredient = this._find("ingredient", event.target.value);
+        if (!ingredient) return;
+        row.querySelector('[name="ingredient_name"]').value = ingredient.name;
+        row.querySelector('[name="ingredient_abv"]').value = ingredient.abv;
+      });
+    });
+  }
+
+  _cocktailData(form) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    data.automatisk_beregning = form.elements.automatisk_beregning.checked;
+    data.automatisk_abv = form.elements.automatisk_abv.checked;
+    data.ingredienser = [...form.querySelectorAll(".ingredient-row")].map((row) => ({
+      bibliotek_id: row.querySelector('[name="ingredient_library"]').value || undefined,
+      navn: row.querySelector('[name="ingredient_name"]').value.trim(),
+      alkoholprocent: Number(row.querySelector('[name="ingredient_abv"]').value || 0),
+      glas: row.querySelector('[name="ingredient_glass"]').value.trim(),
+      "2_liter": row.querySelector('[name="ingredient_two"]').value.trim(),
+      "9_liter": row.querySelector('[name="ingredient_nine"]').value.trim(),
+    })).filter((item) => item.navn);
+    return data;
+  }
+
+  async _saveCocktail(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    this._saving = true; this._error = ""; this._render();
+    try {
+      await this._hass.callWS(this._command("tapcocktail/cocktail/save", { data: this._cocktailData(form), ...(form.dataset.originalId ? { original_id: form.dataset.originalId } : {}) }));
+      this._dialog = null; this._loaded = false; await this._load();
+    } catch (error) { this._error = this._errorText(error); this._render(); }
+    finally { this._saving = false; }
+  }
+
+  async _saveIngredient(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form).entries());
+    values.abv = Number(values.abv);
+    this._saving = true; this._error = ""; this._render();
+    try {
+      await this._hass.callWS(this._command("tapcocktail/ingredient/save", { data: values, ...(form.dataset.originalId ? { original_id: form.dataset.originalId } : {}) }));
+      this._dialog = null; this._loaded = false; await this._load();
+    } catch (error) { this._error = this._errorText(error); this._render(); }
+    finally { this._saving = false; }
+  }
+
+  async _delete(kind, id) {
+    this._saving = true; this._error = ""; this._render();
+    try {
+      const type = kind === "cocktail" ? "tapcocktail/cocktail/delete" : "tapcocktail/ingredient/delete";
+      const key = kind === "cocktail" ? "cocktail_id" : "ingredient_id";
+      await this._hass.callWS(this._command(type, { [key]: id, confirm: true }));
+      this._dialog = null; this._loaded = false; await this._load();
+    } catch (error) { this._error = this._errorText(error); this._render(); }
+    finally { this._saving = false; }
+  }
+}
+
+if (!customElements.get("tapcocktail-library-card")) {
+  customElements.define("tapcocktail-library-card", TapCocktailLibraryCard);
+}
+
+window.customCards.push({
+  type: "tapcocktail-library-card",
+  name: "TapCocktail Library Card",
+  description: "Administrér cocktails og ingredienser direkte fra Home Assistant-dashboardet.",
   preview: true,
 });
