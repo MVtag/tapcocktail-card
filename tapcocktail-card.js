@@ -1,6 +1,6 @@
 /**
  * TapCocktail Lovelace Card
- * Version 1.3.2
+ * Version 1.4.0
  *
  * Example:
  * type: custom:tapcocktail-card
@@ -130,9 +130,20 @@ class TapCocktailCard extends HTMLElement {
       })
       .join("|");
 
+    const cocktailEntity = this._state(this._entityIds().cocktail);
+    const temperatureSensorId =
+      cocktailEntity?.attributes?.temperatursensor ??
+      cocktailEntity?.attributes?.temperature_sensor;
+    const temperatureEntity = temperatureSensorId
+      ? this._state(temperatureSensorId)
+      : null;
+    const temperatureKey = temperatureEntity
+      ? `${temperatureSensorId}:${temperatureEntity.state}:${temperatureEntity.last_updated}`
+      : `${temperatureSensorId ?? "none"}:missing`;
+
     // Shelf-life and "time on tap" labels change as time passes, even when
     // Home Assistant entity states themselves have not changed.
-    return `${entityKey}|minute:${Math.floor(Date.now() / 60000)}`;
+    return `${entityKey}|${temperatureKey}|minute:${Math.floor(Date.now() / 60000)}`;
   }
 
   _escape(value) {
@@ -596,6 +607,25 @@ class TapCocktailCard extends HTMLElement {
     const abv = attrs.abv;
     const co2 = attrs.co2 ?? attrs.vol_co2;
     const temperature = attrs.temperatur ?? attrs.temperature;
+    const temperatureSensorId =
+      liveAttrs.temperatursensor ?? liveAttrs.temperature_sensor;
+    const temperatureEntity = temperatureSensorId
+      ? this._state(temperatureSensorId)
+      : null;
+    const measuredTemperature = (
+      temperatureEntity &&
+      !["unknown", "unavailable", "none", ""].includes(
+        String(temperatureEntity.state).toLowerCase()
+      ) &&
+      Number.isFinite(Number(temperatureEntity.state))
+    )
+      ? Number(temperatureEntity.state).toLocaleString("da-DK", {
+          maximumFractionDigits: 1,
+        })
+      : null;
+    const temperatureText = temperature !== undefined
+      ? `${measuredTemperature ? `${measuredTemperature} / ` : ""}${temperature}`
+      : measuredTemperature;
     const glass = attrs.glas ?? attrs.glass;
     const shelfLife = attrs.holdbarhed ?? attrs.shelf_life;
     const servingTips =
@@ -1198,7 +1228,7 @@ class TapCocktailCard extends HTMLElement {
               <div class="compact-info">
                 ${abv !== undefined ? `<span>🥃 ${this._escape(abv)} %</span>` : ""}
                 ${co2 !== undefined ? `<span>💨 ${this._escape(co2)} vol</span>` : ""}
-                ${temperature !== undefined ? `<span>🌡️ ${this._escape(temperature)} °C</span>` : ""}
+                ${temperatureText !== null ? `<span>🌡️ ${this._escape(temperatureText)} °C</span>` : ""}
               </div>` : ""}
 
             ${this._config.show_glass && glass
@@ -1232,7 +1262,7 @@ class TapCocktailCard extends HTMLElement {
               <div class="details">
                 ${abv !== undefined ? `<div class="detail">🥃 ${this._escape(abv)} % ABV</div>` : ""}
                 ${co2 !== undefined ? `<div class="detail">💨 ${this._escape(co2)} vol CO₂</div>` : ""}
-                ${temperature !== undefined ? `<div class="detail">🌡️ ${this._escape(temperature)} °C</div>` : ""}
+                ${temperatureText !== null ? `<div class="detail">🌡️ ${this._escape(temperatureText)} °C</div>` : ""}
                 ${this._config.show_glass && glass ? `<div class="detail">🍸 ${this._escape(glass)}</div>` : ""}
               </div>` : ""}
 
