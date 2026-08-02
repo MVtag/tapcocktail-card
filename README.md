@@ -1,5 +1,12 @@
 # TapCocktail Card
 
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat-square&logo=home-assistant-community-store)](https://github.com/hacs/default)
+[![Latest release](https://img.shields.io/github/v/release/MVtag/tapcocktail-card?style=flat-square)](https://github.com/MVtag/tapcocktail-card/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/MVtag/tapcocktail-card/total?style=flat-square)](https://github.com/MVtag/tapcocktail-card/releases)
+[![GitHub stars](https://img.shields.io/github/stars/MVtag/tapcocktail-card?style=flat-square)](https://github.com/MVtag/tapcocktail-card/stargazers)
+[![Open issues](https://img.shields.io/github/issues/MVtag/tapcocktail-card?style=flat-square)](https://github.com/MVtag/tapcocktail-card/issues)
+[![License](https://img.shields.io/github/license/MVtag/tapcocktail-card?style=flat-square)](https://github.com/MVtag/tapcocktail-card/blob/main/LICENSE)
+
 A custom Lovelace dashboard card for the [TapCocktail](https://github.com/MVtag/TapCocktail) Home Assistant integration.
 
 TapCocktail Card provides a visual dashboard for every tap with drink selection, carbonation controls, recipe scaling, serving information, animated CO₂ bubbles, time on tap and keg shelf life. The same installation also includes TapCocktail Library Card for managing cocktail and ingredient libraries.
