@@ -18,7 +18,8 @@ TapCocktail Card provides a visual dashboard for every tap with drink selection,
 - Visual Home Assistant card editor with live preview
 - Supports taps 1–8 and any positive tap number
 - Drink selector grouped by category
-- Colour, icon, ABV, CO₂, temperature and glass information
+- Colour, icon, ABV, CO₂, recommended temperature and glass information
+- Optional live temperature beside the recommended value, for example `4.2 / 3 °C`
 - Carbonation status, progress, time selection and controls
 - Recipe display for one glass, 2 litres or 9 litres
 - Serving tips and time on tap
@@ -34,7 +35,7 @@ TapCocktail Card provides a visual dashboard for every tap with drink selection,
 
 ## Requirements
 
-Install and configure the [TapCocktail integration](https://github.com/MVtag/TapCocktail) first. Shelf-life display requires TapCocktail **v1.8.0 or newer**. TapCocktail Library Card requires TapCocktail **v2.1.0 or newer** and a Home Assistant administrator account.
+Install and configure the [TapCocktail integration](https://github.com/MVtag/TapCocktail) first. Shelf-life display requires TapCocktail **v1.8.0 or newer**. TapCocktail Library Card requires TapCocktail **v2.1.0 or newer** and a Home Assistant administrator account. Live temperature display requires TapCocktail **v2.3.0 or newer** and TapCocktail Card **v1.4.0 or newer**.
 
 ## Installation with HACS
 
@@ -69,6 +70,12 @@ name: Hane 1
 
 For another tap, change `tap` and the name. The editor controls layouts, visible information, recipe size, carbonation controls, time on tap and shelf-life display.
 
+## Live temperature display
+
+Select an optional temperature sensor for each tap under **Settings → Devices & services → TapCocktail → Configure**. The card then displays the live measurement before the cocktail's recommended serving temperature, for example **`4.2 / 3 °C`**.
+
+Each tap can use its own sensor. The value updates automatically when the selected Home Assistant sensor changes and works in both normal and compact layouts. If the sensor is not configured, unknown or unavailable, the card falls back to the recommended temperature only.
+
 ## Library Card
 
 The Library Card is installed together with the regular card. Add it through the dashboard editor, or use YAML:
@@ -78,7 +85,9 @@ type: custom:tapcocktail-library-card
 title: TapCocktail Bibliotek
 ```
 
-It provides separate Cocktail and Ingredient tabs with search, filtering and safe create, edit and delete actions. Deletion always requires confirmation.
+It provides separate **Cocktails** and **Ingredients** tabs with search, category filtering and safe create, edit and delete actions. Deletion always requires confirmation.
+
+Use the **Ingredients** tab to maintain reusable spirits and mixers with their alcohol percentages. When a cocktail is created or edited, its 1–12 ingredient rows can select entries from this library. TapCocktail copies the chosen name and ABV into the recipe, supports a per-row ABV override and calculates the finished-drink ABV. Existing recipes keep their own ingredient snapshot, so later library changes do not silently modify saved cocktails.
 
 If Home Assistant has more than one TapCocktail integration entry, add its entry ID:
 
