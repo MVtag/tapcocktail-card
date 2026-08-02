@@ -1,6 +1,6 @@
 /**
  * TapCocktail Lovelace Card
- * Version 1.3.1
+ * Version 1.3.2
  *
  * Example:
  * type: custom:tapcocktail-card
@@ -667,16 +667,16 @@ class TapCocktailCard extends HTMLElement {
     const bubbleLevel = Math.max(0, Math.min(1, (co2Value - 2.0) / 1.0));
     const bubbleCount = Math.round(18 + bubbleLevel * 26);
     const bubbleScale = (1.05 + bubbleLevel * 0.40).toFixed(2);
-    const bubbleBaseDuration = 4.0 - bubbleLevel * 2.2;
+    const bubbleBaseDuration = 8.0 - bubbleLevel * 3.2;
 
     const bubbles = Array.from({ length: bubbleCount }, (_, index) => {
       const left = (index * 17 + 7) % 100;
       const size = 10 + ((index * 5) % 18);
       const speed = Math.max(
-        1.2,
-        bubbleBaseDuration + (((index * 7) % 9) - 4) * 0.12
+        4.0,
+        bubbleBaseDuration + (((index * 7) % 9) - 4) * 0.24
       ).toFixed(2);
-      const delay = -((index * 0.63) % 5).toFixed(2);
+      const delay = -((index * 1.26) % 10).toFixed(2);
 
       return `<span class="bubble" style="left:${left}%;--size:${size}px;--speed:${speed}s;--delay:${delay}s"></span>`;
     }).join("");
