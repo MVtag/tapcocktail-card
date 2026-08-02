@@ -1,6 +1,6 @@
 # TapCocktail Card
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat-square&logo=home-assistant-community-store)](https://github.com/hacs/default)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5?style=flat-square&logo=home-assistant-community-store)](https://hacs.xyz/)
 [![Latest release](https://img.shields.io/github/v/release/MVtag/tapcocktail-card?style=flat-square)](https://github.com/MVtag/tapcocktail-card/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/MVtag/tapcocktail-card/total?style=flat-square)](https://github.com/MVtag/tapcocktail-card/releases)
 [![GitHub stars](https://img.shields.io/github/stars/MVtag/tapcocktail-card?style=flat-square)](https://github.com/MVtag/tapcocktail-card/stargazers)
