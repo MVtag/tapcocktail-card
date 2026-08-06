@@ -1,9 +1,11 @@
-/** TapCocktail Card v1.5.0 - CO2 pressure plan */
+/** TapCocktail Card v1.5.1 - CO2 pressure plan and extended bubbles */
 import "./tapcocktail-card-core.js";
 
 const Card = customElements.get("tapcocktail-card");
 const Editor = customElements.get("tapcocktail-card-editor");
 const invalid = new Set(["", "unknown", "unavailable", "none"]);
+const BUBBLE_MIN_CO2 = 2.0;
+const BUBBLE_MAX_CO2 = 4.0;
 
 if (Card && !Card.__pressurePlan) {
   Card.__pressurePlan = true;
@@ -53,6 +55,52 @@ if (Card && !Card.__pressurePlan) {
       temp: this._pressureValue(attrs.temperatur, 1),
       source: String(attrs.temperatur_kilde ?? ""),
     };
+  };
+
+  p._renderExtendedBubbles = function () {
+    const root = this.shadowRoot;
+    const container = root?.querySelector(".bubbles");
+    if (!container || !this._hass || !this._config) return;
+
+    const ids = this._entityIds();
+    const cocktailEntity = this._state(ids.cocktail);
+    const libraryEntity = this._state(ids.library);
+    const previewCocktail =
+      this._config.preview_cocktail_id &&
+      libraryEntity?.attributes?.cocktails?.[this._config.preview_cocktail_id];
+    const attrs =
+      previewCocktail && typeof previewCocktail === "object"
+        ? previewCocktail
+        : cocktailEntity?.attributes ?? {};
+
+    const rawCo2 = Number(attrs.co2 ?? attrs.vol_co2 ?? BUBBLE_MIN_CO2);
+    const co2 = Number.isFinite(rawCo2) ? rawCo2 : BUBBLE_MIN_CO2;
+    const clampedCo2 = Math.max(BUBBLE_MIN_CO2, Math.min(BUBBLE_MAX_CO2, co2));
+    const bubbleLevel = Math.max(
+      0,
+      Math.min(
+        1,
+        (clampedCo2 - BUBBLE_MIN_CO2) /
+          (BUBBLE_MAX_CO2 - BUBBLE_MIN_CO2)
+      )
+    );
+
+    const bubbleCount = Math.round(18 + bubbleLevel * 26);
+    const bubbleScale = (1.05 + bubbleLevel * 0.40).toFixed(2);
+    const bubbleBaseDuration = 8.0 - bubbleLevel * 3.2;
+
+    container.style.transform = `scale(${bubbleScale})`;
+    container.innerHTML = Array.from({ length: bubbleCount }, (_, index) => {
+      const left = (index * 17 + 7) % 100;
+      const size = 10 + ((index * 5) % 18);
+      const speed = Math.max(
+        4.0,
+        bubbleBaseDuration + (((index * 7) % 9) - 4) * 0.24
+      ).toFixed(2);
+      const delay = -((index * 1.26) % 10).toFixed(2);
+
+      return `<span class="bubble" style="left:${left}%;--size:${size}px;--speed:${speed}s;--delay:${delay}s"></span>`;
+    }).join("");
   };
 
   p._renderPressurePlan = function () {
@@ -134,6 +182,7 @@ if (Card && !Card.__pressurePlan) {
 
   p._render = function (...args) {
     const result = oldRender.apply(this, args);
+    this._renderExtendedBubbles();
     this._renderPressurePlan();
     return result;
   };
@@ -185,5 +234,5 @@ if (Editor && !Editor.__pressurePlan) {
 }
 
 const registration = window.customCards?.find((item) => item.type === "tapcocktail-card");
-if (registration) registration.description = "TapCocktail med opskrift, live temperatur og automatisk CO2-trykplan.";
-console.info("TapCocktail Card v1.5.0 - CO2 pressure plan active");
+if (registration) registration.description = "TapCocktail med opskrift, live temperatur, CO2-trykplan og bobler fra 2,0 til 4,0 vol.";
+console.info("TapCocktail Card v1.5.1 - bubble scale 2.0-4.0 vol CO2 active");
