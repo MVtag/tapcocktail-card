@@ -1,4 +1,4 @@
-/** TapCocktail Card v1.5.1 - CO2 pressure plan and extended bubbles */
+/** TapCocktail Card v1.6.0 - lighter CO2 pressure plan and extended bubbles */
 import "./tapcocktail-card-core.js";
 
 const Card = customElements.get("tapcocktail-card");
@@ -123,7 +123,8 @@ if (Card && !Card.__pressurePlan) {
     const carbonation = this._pressureData(this._state(ids.carbonationPressure));
     const cooling = this._pressureData(this._state(ids.coolingPressure));
     const serving = this._pressureData(this._state(ids.servingPressure));
-    const status = this._state(ids.status)?.state ?? "idle";
+    const status = String(this._state(ids.status)?.state ?? "idle").toLowerCase();
+    const coolingStates = new Set(["cooling", "cooling_down", "nedkoling", "nedkøling"]);
     const co2 = this._pressureValue(
       cocktail.attributes?.co2 ??
         cocktail.attributes?.vol_co2 ??
@@ -131,49 +132,142 @@ if (Card && !Card.__pressurePlan) {
       1
     );
 
+    const activeStep =
+      status === "carbonating"
+        ? "carbonation"
+        : coolingStates.has(status)
+          ? "cooling"
+          : status === "ready"
+            ? "serving"
+            : null;
+
+    const sourceLabel = (source) => ({
+      karboneringsrum: "Fælles rumføler",
+      "opskriftens måltemperatur": "Opskriftens måltemperatur",
+      "hanens temperatursensor": "Hanens temperaturføler",
+    })[source] ?? source;
+
+    const row = (key, number, name, icon, data, missing) => {
+      const temp = data.ready && data.temp ? `${data.temp} °C` : missing;
+      const pressure = data.ready && data.bar ? `${data.bar} bar` : "–";
+      return `
+        <div class="tc-pressure-row ${activeStep === key ? "active" : ""}">
+          <div class="tc-pressure-number"><span>${number}</span></div>
+          <div class="tc-pressure-label">
+            <ha-icon icon="${icon}"></ha-icon>
+            <span>${name}</span>
+          </div>
+          <div class="tc-pressure-temp">${this._escape(temp)}</div>
+          <div class="tc-pressure-bar">${pressure}</div>
+        </div>`;
+    };
+
+    const detailRow = (name, data, missing) => {
+      const detail = data.ready
+        ? `${data.psi ?? "–"} psi${data.source ? ` · ${sourceLabel(data.source)}` : ""}`
+        : missing;
+      return `<div class="tc-pressure-detail-row"><span>${name}</span><strong>${this._escape(detail)}</strong></div>`;
+    };
+
+    let actionText = "";
+    let actionIcon = "mdi:information-outline";
+
+    if (!carbonation.ready) {
+      actionText = "Vælg den fælles rumføler for at beregne karboneringstrykket.";
+      actionIcon = "mdi:alert-circle-outline";
+    } else if (status === "carbonating") {
+      actionText = cooling.ready
+        ? `Når karboneringen er færdig: Sæt fadet på køl → ${cooling.bar} bar`
+        : "Når karboneringen er færdig: Sæt fadet på køl.";
+      actionIcon = "mdi:snowflake";
+    } else if (coolingStates.has(status)) {
+      actionText = cooling.ready
+        ? `Køler ned mod ${cooling.temp ?? "måltemperaturen"} °C · ${cooling.bar} bar`
+        : "Fadet køler ned mod serveringstemperaturen.";
+      actionIcon = "mdi:snowflake-thermometer";
+    } else if (status === "ready") {
+      actionText = serving.ready
+        ? `Klar til servering · Anbefalet tryk ${serving.bar} bar`
+        : "Klar til servering.";
+      actionIcon = "mdi:check-circle-outline";
+    } else {
+      actionText = cooling.ready
+        ? `Start ved ${carbonation.bar} bar · På køl: ${cooling.bar} bar`
+        : `Start karbonering ved ${carbonation.bar} bar`;
+      actionIcon = "mdi:gauge";
+    }
+
     if (!root.querySelector("style[data-tc-pressure]")) {
       const style = document.createElement("style");
       style.dataset.tcPressure = "";
       style.textContent = `
-        .tc-pressure-plan{margin-top:18px;padding:16px;border-radius:18px;border:1px solid color-mix(in srgb,var(--cocktail-color) 36%,transparent);background:color-mix(in srgb,var(--cocktail-color) 12%,var(--card-background-color))}
-        .tc-pressure-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.tc-pressure-kicker{font-size:12px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--secondary-text-color)}.tc-pressure-title{font-size:18px;font-weight:900;margin-top:3px}.tc-pressure-target{padding:6px 9px;border-radius:999px;font-size:12px;font-weight:800;background:color-mix(in srgb,var(--cocktail-color) 22%,transparent);white-space:nowrap}
-        .tc-pressure-warning{display:flex;gap:8px;padding:10px;margin-bottom:10px;border-radius:12px;background:#fff3cd;color:#6b4500;font-size:12px;line-height:1.35}.tc-pressure-warning ha-icon{--mdc-icon-size:18px;flex:0 0 auto}
-        .tc-pressure-steps{display:grid;gap:8px}.tc-pressure-step{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px;border-radius:14px;background:color-mix(in srgb,var(--primary-text-color) 6%,transparent);border:1px solid transparent}.tc-pressure-step.active{border-color:color-mix(in srgb,var(--cocktail-color) 62%,transparent);background:color-mix(in srgb,var(--cocktail-color) 18%,transparent)}
-        .tc-pressure-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:color-mix(in srgb,var(--cocktail-color) 24%,transparent)}.tc-pressure-icon ha-icon{--mdc-icon-size:21px}.tc-pressure-name{font-size:14px;font-weight:900}.tc-pressure-meta,.tc-pressure-sub,.tc-pressure-note,.tc-pressure-arrow{font-size:11px;color:var(--secondary-text-color)}.tc-pressure-meta{margin-top:2px}.tc-pressure-value{text-align:right;white-space:nowrap}.tc-pressure-value strong{display:block;font-size:15px}.tc-pressure-arrow{display:flex;align-items:center;gap:6px;padding-left:13px}.tc-pressure-arrow ha-icon{--mdc-icon-size:14px}.tc-pressure-note{margin-top:11px;line-height:1.4}
-        @media(max-width:480px){.tc-pressure-step{grid-template-columns:36px minmax(0,1fr)}.tc-pressure-value{grid-column:2;text-align:left}.tc-pressure-value strong,.tc-pressure-value span{display:inline}.tc-pressure-value span:before{content:" \\00b7 "}}
+        .tc-pressure-plan{
+          margin-top:14px;
+          padding:13px 14px 10px;
+          border-radius:16px;
+          border:1px solid color-mix(in srgb,var(--cocktail-color) 25%,transparent);
+          background:color-mix(in srgb,var(--cocktail-color) 7%,var(--card-background-color));
+        }
+        .tc-pressure-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+        .tc-pressure-title{font-size:13px;font-weight:900;letter-spacing:.055em;text-transform:uppercase}
+        .tc-pressure-target{padding:4px 8px;border-radius:999px;font-size:11px;font-weight:800;background:color-mix(in srgb,var(--cocktail-color) 16%,transparent);white-space:nowrap}
+        .tc-pressure-rows{display:grid;gap:2px}
+        .tc-pressure-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto auto;align-items:center;gap:8px;min-height:38px;padding:5px 7px;border-radius:11px;color:var(--secondary-text-color)}
+        .tc-pressure-row.active{background:color-mix(in srgb,var(--cocktail-color) 16%,transparent);color:var(--primary-text-color)}
+        .tc-pressure-number{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;font-size:10px;font-weight:900;background:color-mix(in srgb,var(--primary-text-color) 7%,transparent)}
+        .tc-pressure-row.active .tc-pressure-number{background:color-mix(in srgb,var(--cocktail-color) 35%,transparent)}
+        .tc-pressure-label{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;font-weight:800;color:var(--primary-text-color)}
+        .tc-pressure-label ha-icon{--mdc-icon-size:16px;opacity:.82}
+        .tc-pressure-temp{font-size:11px;white-space:nowrap}
+        .tc-pressure-bar{font-size:13px;font-weight:900;color:var(--primary-text-color);white-space:nowrap;text-align:right}
+        .tc-pressure-action{display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px 9px;border-radius:10px;background:color-mix(in srgb,var(--primary-text-color) 5%,transparent);font-size:11px;line-height:1.35;color:var(--secondary-text-color)}
+        .tc-pressure-action ha-icon{--mdc-icon-size:16px;flex:0 0 auto;color:var(--primary-text-color)}
+        .tc-pressure-toggle{display:flex;align-items:center;gap:4px;margin:5px auto -1px;padding:5px 8px;border:0;background:transparent;color:var(--secondary-text-color);font:inherit;font-size:10px;font-weight:800;cursor:pointer}
+        .tc-pressure-toggle ha-icon{--mdc-icon-size:15px}
+        .tc-pressure-details{display:grid;gap:5px;margin-top:5px;padding:8px 2px 2px;border-top:1px solid color-mix(in srgb,var(--primary-text-color) 9%,transparent)}
+        .tc-pressure-detail-row{display:flex;justify-content:space-between;gap:12px;font-size:10px;color:var(--secondary-text-color)}
+        .tc-pressure-detail-row strong{font-weight:700;text-align:right;color:var(--secondary-text-color)}
+        .tc-pressure-footnote{margin-top:2px;font-size:9.5px;line-height:1.35;color:var(--secondary-text-color);opacity:.85}
+        @media(max-width:480px){
+          .tc-pressure-row{grid-template-columns:22px minmax(0,1fr) auto}
+          .tc-pressure-temp{display:none}
+          .tc-pressure-label{font-size:11.5px}
+          .tc-pressure-bar{font-size:12.5px}
+        }
       `;
       root.append(style);
     }
 
-    const sourceLabel = (source) => ({
-      karboneringsrum: "F\u00e6lles rumf\u00f8ler",
-      "opskriftens m\u00e5ltemperatur": "Opskriftens m\u00e5ltemperatur",
-      "hanens temperatursensor": "Hanens temperaturf\u00f8ler",
-    })[source] ?? source;
-
-    const step = (name, icon, data, active, missing) => {
-      const meta = data.ready
-        ? `${data.temp ?? "-"} \u00b0C${data.source ? ` \u00b7 ${sourceLabel(data.source)}` : ""}`
-        : missing;
-      const value = data.ready
-        ? `<strong>${data.bar} bar</strong><span class="tc-pressure-sub">${data.psi ?? "-"} psi</span>`
-        : `<strong>-</strong><span class="tc-pressure-sub">Kan ikke beregnes</span>`;
-      return `<div class="tc-pressure-step ${active ? "active" : ""}"><div class="tc-pressure-icon"><ha-icon icon="${icon}"></ha-icon></div><div><div class="tc-pressure-name">${name}</div><div class="tc-pressure-meta">${this._escape(meta)}</div></div><div class="tc-pressure-value">${value}</div></div>`;
-    };
-
+    const detailsOpen = Boolean(this._pressureDetailsOpen);
     const section = document.createElement("section");
     section.className = "tc-pressure-plan";
     section.innerHTML = `
-      <div class="tc-pressure-head"><div><div class="tc-pressure-kicker">CO\u2082-trykplan</div><div class="tc-pressure-title">Karbonering \u2192 k\u00f8l \u2192 servering</div></div>${co2 ? `<div class="tc-pressure-target">${co2} vol CO\u2082</div>` : ""}</div>
-      ${carbonation.ready ? "" : `<div class="tc-pressure-warning"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><span>V\u00e6lg den f\u00e6lles f\u00f8ler i <b>Karboneringsrum Temperatursensor</b>.</span></div>`}
-      <div class="tc-pressure-steps">
-        ${step("1. Karbonering", "mdi:gauge", carbonation, status === "carbonating", "Mangler f\u00e6lles rumtemperatur")}
-        <div class="tc-pressure-arrow"><ha-icon icon="mdi:arrow-down"></ha-icon><span>S\u00e6nk regulatortrykket, n\u00e5r fadet s\u00e6ttes p\u00e5 k\u00f8l</span></div>
-        ${step("2. Nedk\u00f8ling", "mdi:snowflake-thermometer", cooling, false, "Mangler cocktailens m\u00e5ltemperatur")}
-        <div class="tc-pressure-arrow"><ha-icon icon="mdi:arrow-down"></ha-icon><span>Bevar balancetrykket under servering</span></div>
-        ${step("3. Servering", "mdi:glass-cocktail", serving, status === "ready", "Mangler temperaturdata")}
+      <div class="tc-pressure-head">
+        <div class="tc-pressure-title">CO₂-plan</div>
+        ${co2 ? `<div class="tc-pressure-target">${co2} vol.</div>` : ""}
       </div>
-      <div class="tc-pressure-note">V\u00e6rdierne er regulatorens ligev\u00e6gtstryk. Brug flow control eller passende slangel\u00e6ngde til at styre h\u00e6ldehastigheden.</div>`;
+      <div class="tc-pressure-rows">
+        ${row("carbonation", "1", "Karbonering", "mdi:gauge", carbonation, "Mangler rumføler")}
+        ${row("cooling", "2", "På køl", "mdi:snowflake", cooling, "Mangler måltemp.")}
+        ${row("serving", "3", "Servering", "mdi:glass-cocktail", serving, "Mangler temp.")}
+      </div>
+      <div class="tc-pressure-action"><ha-icon icon="${actionIcon}"></ha-icon><span>${this._escape(actionText)}</span></div>
+      <button class="tc-pressure-toggle" type="button">
+        <span>${detailsOpen ? "Skjul detaljer" : "Vis detaljer"}</span>
+        <ha-icon icon="${detailsOpen ? "mdi:chevron-up" : "mdi:chevron-down"}"></ha-icon>
+      </button>
+      ${detailsOpen ? `
+        <div class="tc-pressure-details">
+          ${detailRow("Karbonering", carbonation, "Kan ikke beregnes")}
+          ${detailRow("På køl", cooling, "Kan ikke beregnes")}
+          ${detailRow("Servering", serving, "Kan ikke beregnes")}
+          <div class="tc-pressure-footnote">Trykkene er regulatorens ligevægtstryk. Brug flow control eller passende slangelængde til at styre hældehastigheden.</div>
+        </div>` : ""}`;
+
+    section.querySelector(".tc-pressure-toggle")?.addEventListener("click", () => {
+      this._pressureDetailsOpen = !this._pressureDetailsOpen;
+      this._renderPressurePlan();
+    });
 
     const anchor = root.querySelector(".details") ?? root.querySelector(".top");
     if (anchor) anchor.insertAdjacentElement("afterend", section);
@@ -222,7 +316,7 @@ if (Editor && !Editor.__pressurePlan) {
     if (!section) return result;
     const label = document.createElement("label");
     label.className = "toggle";
-    label.innerHTML = `<span>Vis CO\u2082-trykplan</span><input id="show_pressure_plan" type="checkbox" ${this._config.show_pressure_plan !== false ? "checked" : ""}/>`;
+    label.innerHTML = `<span>Vis CO₂-trykplan</span><input id="show_pressure_plan" type="checkbox" ${this._config.show_pressure_plan !== false ? "checked" : ""}/>`;
     const before = section.querySelector("#recipe_mode")?.closest("label");
     if (before) section.insertBefore(label, before); else section.append(label);
     label.querySelector("input")?.addEventListener("change", (event) => {
@@ -234,5 +328,5 @@ if (Editor && !Editor.__pressurePlan) {
 }
 
 const registration = window.customCards?.find((item) => item.type === "tapcocktail-card");
-if (registration) registration.description = "TapCocktail med opskrift, live temperatur, CO2-trykplan og bobler fra 2,0 til 4,0 vol.";
-console.info("TapCocktail Card v1.5.1 - bubble scale 2.0-4.0 vol CO2 active");
+if (registration) registration.description = "TapCocktail med let CO2-plan, live temperatur og bobler fra 2,0 til 4,0 vol.";
+console.info("TapCocktail Card v1.6.0 - lighter CO2 pressure plan active");
