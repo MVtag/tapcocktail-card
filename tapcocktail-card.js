@@ -1,4 +1,4 @@
-/** TapCocktail Card v1.6.0 - lighter CO2 pressure plan and extended bubbles */
+/** TapCocktail Card v1.6.1 - HACS review hardening */
 import "./tapcocktail-card-core.js";
 
 const Card = customElements.get("tapcocktail-card");
@@ -329,4 +329,4 @@ if (Editor && !Editor.__pressurePlan) {
 
 const registration = window.customCards?.find((item) => item.type === "tapcocktail-card");
 if (registration) registration.description = "TapCocktail med let CO2-plan, live temperatur og bobler fra 2,0 til 4,0 vol.";
-console.info("TapCocktail Card v1.6.0 - lighter CO2 pressure plan active");
+console.info("TapCocktail Card v1.6.1 - HACS review hardening active");
