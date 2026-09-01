@@ -9,6 +9,8 @@
 
 A custom Lovelace dashboard card for the [TapCocktail](https://github.com/MVtag/TapCocktail) Home Assistant integration.
 
+> **Language:** The card interface is currently Danish-only. Localisation is not yet available.
+
 TapCocktail Card provides a visual dashboard for every tap with drink selection, carbonation controls, recipe scaling, serving information, animated CO₂ bubbles, time on tap and keg shelf life. The same installation also includes TapCocktail Library Card for managing cocktail and ingredient libraries.
 
 ![TapCocktail Card showing Spezi on tap 2](images/tapcocktail-card.png)
@@ -36,6 +38,8 @@ TapCocktail Card provides a visual dashboard for every tap with drink selection,
 ## Requirements
 
 Install and configure the [TapCocktail integration](https://github.com/MVtag/TapCocktail) first. Shelf-life display requires TapCocktail **v1.8.0 or newer**. TapCocktail Library Card requires TapCocktail **v2.1.0 or newer** and a Home Assistant administrator account. Live temperature display requires TapCocktail **v2.3.0 or newer** and TapCocktail Card **v1.4.0 or newer**.
+
+The card derives its Home Assistant entity IDs from the configured tap number. Renaming the TapCocktail entities can therefore disconnect the card; keep the integration's default entity IDs.
 
 ## Installation with HACS
 
