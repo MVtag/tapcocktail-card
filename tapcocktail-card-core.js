@@ -603,7 +603,10 @@ class TapCocktailCard extends HTMLElement {
     }
 
     const icon = this._displayIcon(attrs.ikon ?? attrs.icon);
-    const color = attrs.farve || attrs.color || "#7ed957";
+    const requestedColor = attrs.farve || attrs.color;
+    const color = /^#[0-9a-f]{6}$/i.test(requestedColor || "")
+      ? requestedColor
+      : "#7ed957";
     const abv = attrs.abv;
     const co2 = attrs.co2 ?? attrs.vol_co2;
     const temperature = attrs.temperatur ?? attrs.temperature;
